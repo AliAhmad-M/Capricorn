@@ -1,0 +1,12 @@
+{
+  "name": "capricorn",
+  "version": "0.1.0",
+  "description": "Capricorn, a desktop computer assistant",
+  "main": "js/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}

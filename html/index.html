@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; script-src 'self'">
+  <title>Capricorn</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body data-state="idle">
+  <main class="app">
+    <!-- Portrait panel -->
+    <section class="side">
+      <div class="portrait-wrap">
+        <div class="frame">
+          <div class="frame-inner portrait">
+            <img id="sprite" class="sprite" src="../assets/idle.jpg" alt="Capricorn">
+            <div class="sweep"></div>
+          </div>
+        </div>
+      </div>
+      <div class="status" role="status" aria-live="polite">
+        <span class="dot"></span>
+        <span id="status-label">Idle</span>
+      </div>
+    </section>
+
+    <!-- Conversation panel -->
+    <section class="main">
+      <div class="frame quiet panel-frame">
+        <div class="frame-inner panel">
+          <div id="log" class="log" aria-live="polite">
+            <p id="empty" class="empty">
+              Ask Capricorn to find a file, check the time, send an email or set a reminder.
+            </p>
+          </div>
+          <div class="chips">
+            <button class="chip" type="button">What time is it?</button>
+            <button class="chip" type="button">Find my latest resume file</button>
+            <button class="chip" type="button">Email Sam about tomorrow's meeting</button>
+            <button class="chip" type="button">Remind me to stretch at 6 pm</button>
+          </div>
+          <form id="form" class="composer" autocomplete="off">
+            <input id="input" type="text" placeholder="Type a request" aria-label="Request">
+            <button class="send" type="submit">Send</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="../js/renderer.js"></script>
+</body>
+</html>
