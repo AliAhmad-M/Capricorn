@@ -1,5 +1,5 @@
 const CONFIG = {
-  ASSET_DIR: '../assets',
+  ASSET_DIR: '../../assets',
   FILES: {
     idle: 'idle',
     blink: 'idle_blink',
