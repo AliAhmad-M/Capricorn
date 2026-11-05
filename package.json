@@ -8,5 +8,9 @@
   },
   "devDependencies": {
     "electron": "^33.2.0"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "ollama": "^0.6.4"
   }
 }

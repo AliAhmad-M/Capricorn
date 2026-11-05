@@ -11,7 +11,26 @@
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../css/style.css">
 </head>
-<body data-state="idle">
+
+<body data-state="idle">  
+  <!-- Loading screen -->
+  <div id="loader" class="loader" aria-label="Loading">
+    <div class="loader-grid"></div>
+
+    <div class="loader-box">
+      <h1 class="loader-title" data-text="CAPRICORN">CAPRICORN</h1>
+
+      <div class="loader-bar"><div id="loader-fill" class="loader-fill"></div></div>
+      <div class="loader-meta">
+        <span id="loader-label" role="status">Loading assets</span>
+        <span id="loader-percent">000%</span>
+      </div>
+
+      <div id="loader-log" class="loader-log" aria-hidden="true"></div>
+      <p class="loader-start">Press any key</p>
+    </div>
+  </div>
+
   <main class="app">
     <!-- Portrait panel -->
     <section class="side">
@@ -19,6 +38,8 @@
         <div class="frame">
           <div class="frame-inner portrait">
             <img id="sprite" class="sprite" src="../../assets/idle.jpg" alt="Capricorn">
+            <div class="ghost ghost-c" aria-hidden="true"></div>
+            <div class="ghost ghost-r" aria-hidden="true"></div>
             <div class="sweep"></div>
           </div>
         </div>
@@ -38,12 +59,12 @@
               Ask Capricorn to find a file, check the time, send an email or set a reminder.
             </p>
           </div>
-          <div class="chips">
+          <!-- <div class="chips">
             <button class="chip" type="button">What time is it?</button>
             <button class="chip" type="button">Find my latest resume file</button>
             <button class="chip" type="button">Email Sam about tomorrow's meeting</button>
             <button class="chip" type="button">Remind me to stretch at 6 pm</button>
-          </div>
+          </div> -->
           <form id="form" class="composer" autocomplete="off">
             <input id="input" type="text" placeholder="Type a request" aria-label="Request">
             <button class="send" type="submit">Send</button>

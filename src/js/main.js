@@ -15,13 +15,16 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false
     },
   });
   win.loadFile(path.join(__dirname, '../html/index.html'));
 }
 
 // Keep assistant work in the main process
-ipcMain.handle('capri:ask', (_event, query) => brain.ask(String(query)));
+ipcMain.handle('capri:ask', (_event, query, conversation) =>
+  brain.ask(String(query), Array.isArray(conversation) ? conversation : [])
+);
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => app.quit());

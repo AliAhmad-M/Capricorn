@@ -1,24 +1,67 @@
-// Placeholder assistant logic until real tools are connected.
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const ollama = require('ollama').default;
+const { toolDefinitions, executeToolCall, fetchUrl } = require('./tools');
+const { CAPRI_SYSTEM_PROMPT } = require('./prompt');
 
-async function ask(query) {
-  await sleep(1800 + Math.random() * 1200); // fake "analysing" time
-  const q = query.toLowerCase();
+const MODEL           = process.env.OLLAMA_MODEL || 'qwen-local';
+const MAX_TOOL_ROUNDS = 5;
+const MAX_HISTORY = 10;
 
-  if (/\btime\b|\bclock\b/.test(q)) {
-    const now = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    return { text: `It's ${now}.` };
+// Ask the model a question
+async function ask(query, conversation = []) {
+  const history = conversation.slice(-MAX_HISTORY);
+
+  const messages = [
+    { role: 'system', content: CAPRI_SYSTEM_PROMPT },
+    ...history,
+    { role: 'user', content: query }
+  ];
+
+  let round = 0;
+
+  while (round < MAX_TOOL_ROUNDS) {
+    const response = await ollama.chat({
+      model: MODEL,
+      messages,
+      tools: toolDefinitions,
+      stream: false,
+      think: false,
+      options: {
+        num_ctx: 2048,
+        temperature: 0.4
+      }
+    });
+
+    const msg = response.message;
+    messages.push(msg);
+
+    // No tool calls, return the message content
+    if (!msg.tool_calls || msg.tool_calls.length === 0) {
+      return { text: msg.content || '', messages: messages.slice(1) };
+    }
+
+    // Run every tool call the model requested
+    for (const call of msg.tool_calls) {
+      console.log(
+        `[capri:tool] ${call.function.name}(${JSON.stringify(call.function.arguments)})`
+      );
+
+      const result = await executeToolCall(call);
+      const content = result.ok ? result.result : `Error: ${result.error}`;
+
+      messages.push({
+        role: 'tool',
+        content,
+        tool_name: call.function.name
+      });
+    }
+
+    round++;
   }
-  if (/\bfind\b|\bfile\b|\bsearch\b/.test(q)) {
-    return { text: 'I found 3 matching files in Documents. (Dummy result: file search is not connected yet.)' };
-  }
-  if (/\bemail\b|\bmail\b|\bsend\b/.test(q)) {
-    return { text: 'Draft ready. I have not sent anything. (Dummy result: email is not connected yet.)' };
-  }
-  if (/\bremind\b|\breminder\b/.test(q)) {
-    return { text: 'Reminder noted. (Dummy result: scheduling is not connected yet.)' };
-  }
-  return { text: `I heard: "${query}".` };
+
+  return {
+    text: "Got stuck, choom. Try again.",
+    messages: messages.slice(1)
+  };
 }
 
 module.exports = { ask };
