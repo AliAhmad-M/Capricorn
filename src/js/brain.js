@@ -1,28 +1,25 @@
-const ollama = require('ollama').default;
+const Groq = require('groq-sdk');
 const { toolDefinitions, executeToolCall } = require('./tools');
 const { CAPRI_SYSTEM_PROMPT } = require('./prompt');
 
-const MODEL           = process.env.OLLAMA_MODEL || 'qwen-local';
+const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const MAX_TOOL_ROUNDS = 5;
-const MAX_HISTORY     = 10;
-const KEEP_ALIVE      = '30m';
+const MAX_HISTORY = 10;
 
-const OPTIONS = {
-  num_ctx: 2048,
-  temperature: 0.4,
-};
+let client;
 
-// Builds the model request
-function buildRequest(messages, options = {}) {
-  return {
-    model: MODEL,
-    messages,
-    tools: toolDefinitions,
-    stream: false,
-    think: false,
-    keep_alive: KEEP_ALIVE,
-    options: { ...OPTIONS, ...options },
-  };
+function getClient() {
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('Set GROQ_API_KEY in the project .env file to use Capri.');
+  }
+
+  if (!client) {
+    client = new Groq({ apiKey });
+  }
+
+  return client;
 }
 
 // Embed the user profile
@@ -39,21 +36,20 @@ function buildSystemPrompt(settings = {}) {
 // Trim history to the last MAX_HISTORY messages
 function trimHistory(conversation) {
   const history = conversation.slice(-MAX_HISTORY);
-  const firstUser = history.findIndex((m) => m.role === 'user');
+  const firstUser = history.findIndex((message) => message.role === 'user');
   return firstUser === -1 ? [] : history.slice(firstUser);
 }
 
-// Load the model and process the system prompt
+// Verify Groq credentials and connectivity before the UI finishes loading.
 async function warmup() {
-  await ollama.chat(
-    buildRequest(
-      [
-        { role: 'system', content: CAPRI_SYSTEM_PROMPT },
-        { role: 'user', content: 'ping' },
-      ],
-      { num_predict: 1 }
-    )
-  );
+  await getClient().chat.completions.create({
+    model: MODEL,
+    messages: [
+      { role: 'system', content: CAPRI_SYSTEM_PROMPT },
+      { role: 'user', content: 'ping' },
+    ],
+    max_tokens: 1,
+  });
 }
 
 // Ask the model a question
@@ -67,9 +63,14 @@ async function ask(query, conversation = [], settings = {}) {
   let round = 0;
 
   while (round < MAX_TOOL_ROUNDS) {
-    const response = await ollama.chat(buildRequest(messages));
+    const response = await getClient().chat.completions.create({
+      model: MODEL,
+      messages,
+      tools: toolDefinitions,
+      temperature: 0.4,
+    });
 
-    const msg = response.message;
+    const msg = response.choices[0].message;
     messages.push(msg);
 
     // No tool calls, return the message content
@@ -80,7 +81,7 @@ async function ask(query, conversation = [], settings = {}) {
     // Run every tool call the model requested
     for (const call of msg.tool_calls) {
       console.log(
-        `[capri:tool] ${call.function.name}(${JSON.stringify(call.function.arguments)})`
+        `[capri:tool] ${call.function.name}(${call.function.arguments})`
       );
 
       const result = await executeToolCall(call, settings);
@@ -88,8 +89,8 @@ async function ask(query, conversation = [], settings = {}) {
 
       messages.push({
         role: 'tool',
-        content,
-        tool_name: call.function.name,
+        tool_call_id: call.id,
+        content: typeof content === 'string' ? content : JSON.stringify(content),
       });
     }
 

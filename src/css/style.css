@@ -1150,6 +1150,19 @@ body[data-view="chat"] .panel {
   backdrop-filter: none;
 }
 
+body[data-view="chat"] .send {
+  flex-basis: 42px;
+}
+
+body[data-view="chat"] .composer-mic {
+  flex-basis: 42px;
+  background: var(--yellow);
+}
+
+body[data-view="chat"] .composer-mic:hover:not(:disabled) {
+  background: #fff;
+}
+
 .log {
   flex: 1;
   min-height: 0;
@@ -1246,18 +1259,56 @@ body[data-view="chat"] .panel {
 }
 
 .send {
+  display: inline-flex;
+  flex: 0 0 48px;
+  align-items: center;
+  justify-content: center;
   font: inherit;
   font-weight: 700;
   font-size: 15px;
   background: var(--yellow);
   color: #000;
   border: 0;
-  padding: 0 26px;
+  padding: 0;
   cursor: pointer;
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
 }
 
 .send:hover:not(:disabled) { background: #fff; }
+
+.send svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.composer-mic {
+  display: inline-flex;
+  flex: 0 0 48px;
+  align-items: center;
+  justify-content: center;
+  color: #061014;
+  background: var(--yellow);
+  border: 0;
+  cursor: pointer;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  transition: background 0.2s;
+}
+
+.composer-mic svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.composer-mic:hover:not(:disabled) {
+  background: #fff;
+}
 
 button:disabled, input:disabled {
   opacity: 0.45;

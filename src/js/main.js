@@ -1,10 +1,11 @@
+require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
 const { app, BrowserWindow, ipcMain, dialog, screen, Menu, globalShortcut } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
 const brain = require('./brain');
 
 const PORTRAIT_SIZE = { width: 220, height: 220 };
-const CHAT_SIZE = { width: 340, height: 460 };
+const CHAT_SIZE = { width: 400, height: 500 };
 const CHAT_GAP = 12;
 const TOGGLE_KEY = 'CommandOrControl+Alt+C';
 const WARMUP_TIMEOUT_MS = 120000;

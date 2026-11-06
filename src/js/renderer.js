@@ -38,6 +38,7 @@ const elements = {
   form: document.querySelector('#form'),
   input: document.querySelector('#input'),
   sendBtn: document.querySelector('#form .send'),
+  micBtn: document.querySelector('#form .composer-mic'),
   dock: document.querySelector('#dock'),
   settings: document.querySelector('#settings'),
   settingsPage: document.querySelector('#settings-page'),
@@ -221,9 +222,7 @@ function setBusy(isBusy) {
   appState.busy = isBusy;
   elements.input.disabled = isBusy;
   elements.sendBtn.disabled = isBusy;
-  elements.chips.forEach((chip) => {
-    chip.disabled = isBusy;
-  });
+  elements.micBtn.disabled = isBusy;
 
   if (!isBusy) {
     elements.input.focus();
@@ -271,10 +270,6 @@ function bindEvents() {
     const query = elements.input.value;
     elements.input.value = '';
     handleRequest(query);
-  });
-
-  elements.chips.forEach((chip) => {
-    chip.addEventListener('click', () => handleRequest(chip.textContent));
   });
 }
 

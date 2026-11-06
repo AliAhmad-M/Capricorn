@@ -1,9 +1,10 @@
 const cheerio = require('cheerio');
 const fs = require('fs/promises');
+const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const MAX_CONTENT_CHARS = 8000;
+const MAX_CONTENT_CHARS = 6000;
 const FETCH_TIMEOUT_MS = 30000;
 const MAX_SCAN_DEPTH = 15;
 
@@ -25,6 +26,22 @@ const toolDefinitions = [
           }
         },
         required: ['url']
+      }
+    }
+  },
+    {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description:
+        'Search the web and return the top results (title, URL, snippet). ' +
+        'Use if the user asks you about current events or something you are unsure of',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Short search query, 2 to 6 words.' }
+        },
+        required: ['query']
       }
     }
   },
@@ -111,6 +128,52 @@ const toolDefinitions = [
           }
         },
         required: ['software']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_system_usage',
+      description:
+        'Check current CPU, RAM, GPU, disk, and battery usage. ' +
+        'Report unavailable metrics clearly instead of guessing.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_resource_processes',
+      description:
+        'Find running processes using the most CPU or memory. ' +
+        'CPU usage is measured over a short sample; memory is the current working set.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'integer',
+            description: 'Maximum number of processes in each list, from 1 to 20.'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'check_network_connectivity',
+      description:
+        'Check whether the computer can reach the internet and list active network interfaces.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
       }
     }
   }
@@ -508,13 +571,341 @@ async function startExecutable(matches, requestedName) {
   return `Started ${selected.name} from ${selected.path}.`;
 }
 
+const MAX_SEARCH_RESULTS = 5;
+const MAX_SNIPPET_CHARS = 200;
+
+const clip = (text, max) =>
+  text.length > max ? `${text.slice(0, max).trim()}...` : text;
+
+// DuckDuckGo wraps result links in a redirect; the real URL is in ?uddg=
+function unwrapDuckDuckGoUrl(href) {
+  try {
+    const url = new URL(href, 'https://duckduckgo.com');
+    return url.searchParams.get('uddg') || url.href;
+  } catch {
+    return href;
+  }
+}
+
+async function searchDuckDuckGo(query) {
+  const res = await fetch('https://html.duckduckgo.com/html/', {
+    method: 'POST',
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'text/html,application/xhtml+xml',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Referer': 'https://html.duckduckgo.com/'
+    },
+    body: new URLSearchParams({
+      q: query,
+      b: '',
+      kl: 'wt-wt'
+    }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+  });
+
+  if (res.status === 202) {
+    throw new Error('Search Failed: DuckDuckGo returned a bot challenge.');
+  }
+  if (!res.ok) throw new Error(`Search Failed: HTTP ${res.status}`);
+
+  const $ = cheerio.load(await res.text());
+  const results = [];
+
+  $('.result').each((_, el) => {
+    const link = $(el).find('a.result__a').first();
+    const href = link.attr('href');
+    if (!href || href.includes('/y.js')) return; // skip ads
+
+    results.push({
+      title: link.text().trim(),
+      url: unwrapDuckDuckGoUrl(href),
+      snippet: $(el).find('.result__snippet').text().trim()
+    });
+
+    if (results.length >= MAX_SEARCH_RESULTS) return false;
+  });
+
+  return results;
+}
+
+async function searchBrave(query, apiKey) {
+  const url = new URL('https://api.search.brave.com/res/v1/web/search');
+  url.searchParams.set('q', query);
+  url.searchParams.set('count', String(MAX_SEARCH_RESULTS));
+
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json', 'X-Subscription-Token': apiKey },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+  });
+
+  if (!res.ok) throw new Error(`Search failed: HTTP ${res.status}`);
+
+  const data = await res.json();
+  return (data.web?.results ?? []).map((r) => ({
+    title: r.title ?? '',
+    url: r.url,
+    snippet: String(r.description ?? '').replace(/<[^>]+>/g, '')
+  }));
+}
+
+async function webSearch({ query }) {
+  if (typeof query !== 'string' || !query.trim()) {
+    throw new Error('A search query is required.');
+  }
+
+  const q = query.trim().slice(0, 200);
+  const apiKey = process.env.BRAVE_API_KEY;
+  const results = apiKey
+    ? await searchBrave(q, apiKey)
+    : await searchDuckDuckGo(q);
+
+  if (results.length === 0) {
+    throw new Error(`Search Failed: No results for "${q}". The search provider may be blocking requests.`);
+  }
+
+  return results
+    .slice(0, MAX_SEARCH_RESULTS)
+    .map((r, i) =>
+      `${i + 1}. ${clip(r.title, 80)}\n${r.url}\n${clip(r.snippet, MAX_SNIPPET_CHARS)}`
+    )
+    .join('\n\n');
+}
+
+function sampleCpuUsage() {
+  return os.cpus().reduce(
+    (total, cpu) => {
+      const times = cpu.times;
+      total.idle += times.idle;
+      total.total += times.user + times.nice + times.sys + times.idle + times.irq;
+      return total;
+    },
+    { idle: 0, total: 0 }
+  );
+}
+
+async function getCpuUsage() {
+  const before = sampleCpuUsage();
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const after = sampleCpuUsage();
+  const total = after.total - before.total;
+  const idle = after.idle - before.idle;
+
+  if (total <= 0) {
+    throw new Error('CPU usage could not be sampled.');
+  }
+
+  return Math.round(((total - idle) / total) * 1000) / 10;
+}
+
+function runPowerShell(script, timeoutMs = 15000) {
+  if (process.platform !== 'win32') {
+    throw new Error('System monitoring through PowerShell is only available on Windows.');
+  }
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+      { windowsHide: true }
+    );
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(new Error(`Could not start PowerShell: ${error.message}`));
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+
+      if (timedOut) {
+        reject(new Error('System monitoring timed out while querying Windows.'));
+        return;
+      }
+      if (code !== 0) {
+        reject(new Error(`Windows system query failed: ${stderr.trim() || `PowerShell exited with code ${code}.`}`));
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(stdout.trim()));
+      } catch {
+        reject(new Error(`Windows system query returned invalid data: ${stderr.trim() || stdout.trim()}`));
+      }
+    });
+  });
+}
+
+async function getSystemUsage() {
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    '$gpuAdapters = @(Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion)',
+    '$gpuCounterError = $null',
+    'try {',
+    '  $gpuEngines = @(Get-CimInstance -Namespace root/cimv2 -ClassName Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction Stop | Where-Object { $_.UtilizationPercentage -gt 0 } | Sort-Object UtilizationPercentage -Descending | Select-Object -First 12 Name, UtilizationPercentage)',
+    '} catch {',
+    '  $gpuEngines = @()',
+    '  $gpuCounterError = $_.Exception.Message',
+    '}',
+    '$disks = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, Size, FreeSpace)',
+    '$batteries = @(Get-CimInstance Win32_Battery | Select-Object Name, EstimatedChargeRemaining, BatteryStatus)',
+    '[PSCustomObject]@{ gpuAdapters = $gpuAdapters; gpuEngines = $gpuEngines; gpuCounterError = $gpuCounterError; disks = $disks; batteries = $batteries } | ConvertTo-Json -Depth 5 -Compress'
+  ].join('; ');
+  const [cpuPercent, windowsData] = await Promise.all([
+    getCpuUsage(),
+    runPowerShell(script)
+  ]);
+  const totalMemory = os.totalmem();
+  const freeMemory = os.freemem();
+
+  return JSON.stringify({
+    cpu: { usagePercent: cpuPercent, logicalProcessors: os.cpus().length },
+    memory: {
+      totalGB: Math.round((totalMemory / 1024 ** 3) * 10) / 10,
+      usedGB: Math.round(((totalMemory - freeMemory) / 1024 ** 3) * 10) / 10,
+      usagePercent: Math.round(((totalMemory - freeMemory) / totalMemory) * 1000) / 10
+    },
+    gpu: {
+      adapters: Array.isArray(windowsData.gpuAdapters)
+        ? windowsData.gpuAdapters
+        : windowsData.gpuAdapters ? [windowsData.gpuAdapters] : [],
+      activeEngines: (Array.isArray(windowsData.gpuEngines)
+        ? windowsData.gpuEngines
+        : windowsData.gpuEngines ? [windowsData.gpuEngines] : []
+      ).map((engine) => {
+        const name = engine.Name || '';
+        const processId = name.match(/(?:^|_)pid_(\d+)(?:_|$)/);
+        const engineType = name.match(/(?:^|_)engtype_(.+)$/);
+
+        return {
+          processId: processId ? Number(processId[1]) : undefined,
+          engineType: engineType ? engineType[1] : name,
+          utilizationPercent: engine.UtilizationPercentage
+        };
+      }),
+      utilizationNote: windowsData.gpuCounterError
+        ? `GPU utilization counters unavailable: ${windowsData.gpuCounterError}`
+        : 'GPU usage is reported per engine. Percentages may total over 100%; processId identifies the owning process when available.'
+    },
+    disks: (Array.isArray(windowsData.disks)
+      ? windowsData.disks
+      : windowsData.disks ? [windowsData.disks] : []
+    ).map((disk) => ({
+      drive: disk.DeviceID,
+      label: disk.VolumeName,
+      totalGB: Math.round((disk.Size / 1024 ** 3) * 10) / 10,
+      freeGB: Math.round((disk.FreeSpace / 1024 ** 3) * 10) / 10,
+      usagePercent: Math.round(((disk.Size - disk.FreeSpace) / disk.Size) * 1000) / 10
+    })),
+    batteries: (Array.isArray(windowsData.batteries)
+      ? windowsData.batteries
+      : windowsData.batteries ? [windowsData.batteries] : []
+    ).map((battery) => ({
+      name: battery.Name,
+      chargePercent: battery.EstimatedChargeRemaining,
+      statusCode: battery.BatteryStatus,
+      status: ({
+        0: 'Unknown',
+        1: 'Discharging',
+        2: 'Connected to AC',
+        3: 'Fully charged',
+        4: 'Low',
+        5: 'Critical',
+        6: 'Charging',
+        7: 'Charging (high)',
+        8: 'Charging (low)',
+        9: 'Charging (critical)',
+        10: 'Undefined',
+        11: 'Partially charged'
+      })[battery.BatteryStatus] || 'Unknown'
+    })),
+    batteryNote: windowsData.batteries && windowsData.batteries.length === 0
+      ? 'No battery detected.'
+      : undefined
+  }, null, 2);
+}
+
+async function listResourceProcesses({ limit = 10 } = {}) {
+  const boundedLimit = Number.isInteger(limit) ? Math.min(20, Math.max(1, limit)) : 10;
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    `$limit = ${boundedLimit}`,
+    '$processorCount = [Environment]::ProcessorCount',
+    '$before = @{}',
+    'Get-Process | ForEach-Object { if ($null -ne $_.CPU) { $before[$_.Id] = [double]$_.CPU } }',
+    '$timer = [Diagnostics.Stopwatch]::StartNew()',
+    'Start-Sleep -Milliseconds 1000',
+    '$timer.Stop()',
+    '$elapsedSeconds = [Math]::Max($timer.Elapsed.TotalSeconds, 0.001)',
+    '$all = @(Get-Process | ForEach-Object {',
+    '  $cpuPercent = 0.0',
+    '  if ($before.ContainsKey($_.Id) -and $null -ne $_.CPU) { $cpuPercent = [Math]::Max(0, (([double]$_.CPU - $before[$_.Id]) / $elapsedSeconds / $processorCount) * 100) }',
+    '  [PSCustomObject]@{ name = $_.ProcessName; pid = $_.Id; cpuPercent = [Math]::Round($cpuPercent, 1); memoryMB = [Math]::Round($_.WorkingSet64 / 1MB, 1) }',
+    '})',
+    '[PSCustomObject]@{ processCount = $all.Count; sampleSeconds = [Math]::Round($elapsedSeconds, 2); topCpu = @($all | Sort-Object cpuPercent -Descending | Select-Object -First $limit); topMemory = @($all | Sort-Object memoryMB -Descending | Select-Object -First $limit) } | ConvertTo-Json -Depth 5 -Compress'
+  ].join('; ');
+  return JSON.stringify(await runPowerShell(script, 20000), null, 2);
+}
+
+async function checkNetworkConnectivity() {
+  const interfaces = Object.entries(os.networkInterfaces())
+    .flatMap(([name, addresses]) =>
+      (addresses || [])
+        .filter((address) => !address.internal)
+        .map((address) => ({ name, address: address.address, family: address.family }))
+    );
+  const startedAt = Date.now();
+
+  try {
+    const response = await fetch('https://www.google.com/generate_204', {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000)
+    });
+    return JSON.stringify({
+      internetConnected: response.ok,
+      statusCode: response.status,
+      latencyMs: Date.now() - startedAt,
+      interfaces
+    }, null, 2);
+  } catch (error) {
+    return JSON.stringify({
+      internetConnected: false,
+      error: error.name === 'TimeoutError'
+        ? 'Timed out while checking internet access.'
+        : error.message,
+      interfaces
+    }, null, 2);
+  }
+}
+
 const toolImplementations = {
   fetch_url: fetchUrl,
+  web_search: webSearch,
   get_current_datetime: getCurrentDateTime,
   list_games: listGames,
   launch_game: launchGame,
   list_software: listSoftware,
   launch_software: launchSoftware,
+  get_system_usage: getSystemUsage,
+  list_resource_processes: listResourceProcesses,
+  check_network_connectivity: checkNetworkConnectivity
 };
 
 // Execute a tool call and return result or error message

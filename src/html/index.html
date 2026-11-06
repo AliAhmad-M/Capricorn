@@ -73,7 +73,17 @@
           </div>
           <form id="form" class="composer" autocomplete="off">
             <input id="input" type="text" placeholder="Type a request" aria-label="Request">
-            <button class="send" type="submit">Send</button>
+            <button class="send" type="submit" aria-label="Send request" title="Send">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M2 21 23 12 2 3v7l15 2-15 2z"/>
+              </svg>
+            </button>
+            <button class="composer-mic" type="button" aria-label="Voice input" title="Voice input">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="9" y="3" width="6" height="12" rx="3"/>
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"/>
+              </svg>
+            </button>
           </form>
         </div>
       </div>
