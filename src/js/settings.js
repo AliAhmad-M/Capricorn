@@ -13,17 +13,49 @@
   const timeZoneOptions = document.querySelector('#timezone-options');
   const timeZoneWrap = document.querySelector('.settings-select-wrap');
 
-  // Game folder settings elements.
-  const gamePathsList = document.querySelector('#game-paths-list');
-  const addGamePathsButton = document.querySelector('#add-game-paths');
-  const gamePathsStatus = document.querySelector('#game-paths-status');
+  const directorySettings = [
+    {
+      key: 'gamePaths',
+      category: 'game',
+      nicknamesKey: 'gameExecutableNicknames',
+      label: 'game paths',
+      emptyTitle: 'No libraries added',
+      emptyDescription: 'Add folders or specific game executables for Capri to find.',
+      pickerPrompt: 'Select game library folders...',
+      selectMethod: 'selectGamePaths',
+      saveMethod: 'setGamePaths',
+      list: document.querySelector('#game-paths-list'),
+      button: document.querySelector('#add-game-paths'),
+      executableButton: document.querySelector('#add-game-executables'),
+      status: document.querySelector('#game-paths-status')
+    },
+    {
+      key: 'softwarePaths',
+      category: 'software',
+      nicknamesKey: 'softwareExecutableNicknames',
+      label: 'software paths',
+      emptyTitle: 'No software folders added',
+      emptyDescription: 'Add folders or specific application executables Capri can launch.',
+      pickerPrompt: 'Select software folders...',
+      selectMethod: 'selectSoftwarePaths',
+      saveMethod: 'setSoftwarePaths',
+      list: document.querySelector('#software-paths-list'),
+      button: document.querySelector('#add-software-paths'),
+      executableButton: document.querySelector('#add-software-executables'),
+      status: document.querySelector('#software-paths-status')
+    }
+  ].filter((directory) => directory.list);
 
   timeZoneSelect.disabled = true;
-  if (addGamePathsButton) addGamePathsButton.disabled = true;
+  for (const directory of directorySettings) {
+    directory.paths = [];
+    directory.nicknames = {};
+    if (directory.button) directory.button.disabled = true;
+    if (directory.executableButton) directory.executableButton.disabled = true;
+  }
   if (userNameInput) userNameInput.disabled = true;
 
   let savedTimeZone = null;
-  let savedGamePaths = [];
   let savedUserName = '';
 
   // Get the current UTC offset for a timezone.
@@ -186,34 +218,30 @@
     }
   }
 
-  // Remove duplicate game paths
-  function normalizeGamePaths(paths) {
+  function normalizePaths(paths) {
     const result = [];
     const seen = new Set();
 
     for (const entry of Array.isArray(paths) ? paths : []) {
       if (typeof entry !== 'string' || !entry.trim()) continue;
 
-      const gamePath = entry.trim();
-      const key = gamePath.replace(/[\\/]+$/, '').toLowerCase()
-        || gamePath.toLowerCase();
+      const directoryPath = entry.trim();
+      const key = directoryPath.replace(/[\\/]+$/, '').toLowerCase()
+        || directoryPath.toLowerCase();
 
       if (seen.has(key)) continue;
 
       seen.add(key);
-      result.push(gamePath);
+      result.push(directoryPath);
     }
 
     return result;
   }
 
-  // Render the configured game folders.
-  function renderGamePaths() {
-    if (!gamePathsList) return;
+  function renderDirectoryPaths(directory) {
+    directory.list.replaceChildren();
 
-    gamePathsList.replaceChildren();
-
-    if (savedGamePaths.length === 0) {
+    if (directory.paths.length === 0) {
       const empty = document.createElement('li');
       const emptyIcon = createFolderIcon();
       const copy = document.createElement('div');
@@ -222,40 +250,64 @@
 
       empty.className = 'settings-path-empty';
       emptyIcon.classList.add('settings-empty-icon');
-      title.textContent = 'No libraries added';
-      description.textContent = 'Add a folder to let Capri find your installed games.';
+      title.textContent = directory.emptyTitle;
+      description.textContent = directory.emptyDescription;
       copy.className = 'settings-empty-copy';
       copy.append(title, description);
       empty.append(emptyIcon, copy);
 
-      gamePathsList.appendChild(empty);
+      directory.list.appendChild(empty);
       return;
     }
 
-    for (const gamePath of savedGamePaths) {
+    for (const directoryPath of directory.paths) {
       const item = document.createElement('li');
       const details = document.createElement('div');
       const name = document.createElement('strong');
       const label = document.createElement('span');
+      const isExecutable = directoryPath.toLowerCase().endsWith('.exe');
 
       item.className = 'settings-path-item';
       name.className = 'settings-path-name';
-      name.textContent = gamePath.split(/[\\/]/).filter(Boolean).pop() || gamePath;
+      name.textContent = directoryPath.split(/[\\/]/).filter(Boolean).pop() || directoryPath;
       label.className = 'settings-path-label';
-      label.textContent = gamePath;
-      label.title = gamePath;
+      label.textContent = directoryPath;
+      label.title = directoryPath;
       details.className = 'settings-path-details';
-      details.append(name, label);
+      details.appendChild(name);
+
+      if (isExecutable) {
+        item.classList.add('settings-path-item-executable');
+        const pathRow = document.createElement('div');
+        const nickname = document.createElement('input');
+
+        pathRow.className = 'settings-executable-path';
+        pathRow.append(createFolderIcon(), label);
+        nickname.className = 'settings-executable-nickname';
+        nickname.type = 'text';
+        nickname.maxLength = 60;
+        nickname.value = directory.nicknames[directoryPath] || '';
+        nickname.placeholder = 'Nickname';
+        nickname.setAttribute('aria-label', `Custom nickname for ${name.textContent}`);
+        nickname.dataset.executablePath = directoryPath;
+        details.append(pathRow, nickname);
+      } else {
+        details.appendChild(label);
+      }
 
       const removeButton = document.createElement('button');
       removeButton.className = 'settings-path-remove';
       removeButton.type = 'button';
       removeButton.textContent = 'Remove';
-      removeButton.dataset.gamePath = gamePath;
-      removeButton.setAttribute('aria-label', `Remove ${gamePath}`);
+      removeButton.dataset.directoryPath = directoryPath;
+      removeButton.setAttribute('aria-label', `Remove ${directoryPath}`);
 
-      item.append(createFolderIcon(), details, removeButton);
-      gamePathsList.appendChild(item);
+      if (isExecutable) {
+        item.append(details, removeButton);
+      } else {
+        item.append(createFolderIcon(), details, removeButton);
+      }
+      directory.list.appendChild(item);
     }
   }
 
@@ -272,41 +324,81 @@
     return icon;
   }
 
-  // Save all configured game folders.
-  async function saveGamePaths(paths) {
-    const previousPaths = [...savedGamePaths];
-    const nextPaths = normalizeGamePaths(paths);
+  async function saveDirectoryPaths(directory, paths) {
+    const previousPaths = [...directory.paths];
+    const previousNicknames = { ...directory.nicknames };
+    const nextPaths = normalizePaths(paths);
 
-    if (!window.capriSettings?.setGamePaths) {
-      gamePathsStatus.textContent = 'Game folder settings are unavailable.';
+    if (!window.capriSettings?.[directory.saveMethod]) {
+      directory.status.textContent = 'Folder settings are unavailable.';
       return;
     }
 
-    if (addGamePathsButton) addGamePathsButton.disabled = true;
+    const remainingPaths = new Set(
+      nextPaths.map((directoryPath) => directoryPath.toLowerCase())
+    );
+    directory.nicknames = Object.fromEntries(
+      Object.entries(directory.nicknames).filter(([executablePath]) =>
+        remainingPaths.has(executablePath.toLowerCase())
+      )
+    );
 
-    savedGamePaths = nextPaths;
-    renderGamePaths();
-    gamePathsStatus.textContent = 'Saving...';
+    if (directory.button) directory.button.disabled = true;
+    if (directory.executableButton) directory.executableButton.disabled = true;
+
+    directory.paths = nextPaths;
+    renderDirectoryPaths(directory);
+    directory.status.textContent = 'Saving...';
 
     try {
-      const result = await window.capriSettings.setGamePaths(nextPaths);
+      const result = await window.capriSettings[directory.saveMethod](nextPaths);
 
-      savedGamePaths = normalizeGamePaths(
+      directory.paths = normalizePaths(
         Array.isArray(result) ? result : nextPaths
       );
 
-      renderGamePaths();
-      gamePathsStatus.textContent = 'Saved';
+      renderDirectoryPaths(directory);
+      directory.status.textContent = 'Saved';
     } catch (error) {
-      savedGamePaths = previousPaths;
-      renderGamePaths();
+      directory.paths = previousPaths;
+      directory.nicknames = previousNicknames;
+      renderDirectoryPaths(directory);
 
-      gamePathsStatus.textContent =
-        `Couldn't save game folders: ${error.message}`;
+      directory.status.textContent =
+        `Couldn't save ${directory.label}: ${error.message}`;
     } finally {
-      if (addGamePathsButton) {
-        addGamePathsButton.disabled = false;
-      }
+      if (directory.button) directory.button.disabled = false;
+      if (directory.executableButton) directory.executableButton.disabled = false;
+    }
+  }
+
+  async function saveExecutableNickname(directory, input) {
+    if (!window.capriSettings?.setExecutableNickname) {
+      directory.status.textContent = 'Executable nicknames are unavailable.';
+      return;
+    }
+
+    const executablePath = input.dataset.executablePath;
+    const previousNickname = directory.nicknames[executablePath] || '';
+    const nickname = input.value.trim();
+    input.disabled = true;
+    directory.status.textContent = 'Saving nickname...';
+
+    try {
+      const settings = await window.capriSettings.setExecutableNickname(
+        directory.category,
+        executablePath,
+        nickname
+      );
+      directory.nicknames = settings[directory.nicknamesKey] || {};
+      input.value = directory.nicknames[executablePath] || '';
+      directory.status.textContent = 'Nickname saved';
+    } catch (error) {
+      input.value = previousNickname;
+      directory.status.textContent =
+        `Couldn't save executable nickname: ${error.message}`;
+    } finally {
+      input.disabled = false;
     }
   }
 
@@ -331,35 +423,34 @@
     }
   }
 
-  // Open the native folder picker and append selected folders.
-  async function addGamePaths() {
-    if (!window.capriSettings?.selectGamePaths) {
-      gamePathsStatus.textContent = 'Folder selection is unavailable.';
+  async function addDirectoryPaths(directory, button, selectMethod, prompt) {
+    if (!window.capriSettings?.[selectMethod]) {
+      directory.status.textContent = 'Path selection is unavailable.';
       return;
     }
 
-    addGamePathsButton.disabled = true;
-    gamePathsStatus.textContent = 'Select Steam library folders...';
+    button.disabled = true;
+    directory.status.textContent = prompt;
 
     try {
-      const selectedPaths = await window.capriSettings.selectGamePaths();
+      const selectedPaths = await window.capriSettings[selectMethod]();
 
       // Cancelled dialogs return an empty array.
       if (!Array.isArray(selectedPaths) || selectedPaths.length === 0) {
-        gamePathsStatus.textContent = '';
+        directory.status.textContent = '';
         return;
       }
 
-      await saveGamePaths([...savedGamePaths, ...selectedPaths]);
+      await saveDirectoryPaths(directory, [...directory.paths, ...selectedPaths]);
     } catch (error) {
-      gamePathsStatus.textContent =
-        `Couldn't select game folders: ${error.message}`;
+      directory.status.textContent =
+        `Couldn't select ${directory.label}: ${error.message}`;
     } finally {
-      addGamePathsButton.disabled = false;
+      button.disabled = false;
     }
   }
 
-  // Load the saved timezone and game folders.
+  // Load the saved timezone and folder settings.
   async function loadSettings() {
     let settings;
 
@@ -367,7 +458,10 @@
       settings = await window.capriSettings.get();
     } catch (error) {
       status.textContent = `Couldn't load settings: ${error.message}`;
-      gamePathsStatus.textContent = 'Couldn\'t load game folder settings.';
+      for (const directory of directorySettings) {
+        directory.status.textContent =
+          `Couldn't load ${directory.label} settings.`;
+      }
       return;
     }
 
@@ -408,12 +502,12 @@
       timeZoneToggle.disabled = true;
     }
 
-    // Restore all saved game folders.
-    savedGamePaths = normalizeGamePaths(settings.gamePaths);
-    renderGamePaths();
-
-    if (addGamePathsButton) {
-      addGamePathsButton.disabled = false;
+    for (const directory of directorySettings) {
+      directory.paths = normalizePaths(settings[directory.key]);
+      directory.nicknames = settings[directory.nicknamesKey] || {};
+      renderDirectoryPaths(directory);
+      if (directory.button) directory.button.disabled = false;
+      if (directory.executableButton) directory.executableButton.disabled = false;
     }
   }
 
@@ -485,21 +579,38 @@
     }
   });
 
-  // Add multiple Steam library folders.
-  addGamePathsButton?.addEventListener('click', addGamePaths);
-
-  // Remove an individual folder from the saved list.
-  gamePathsList?.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-game-path]');
-
-    if (!button) return;
-
-    const gamePath = button.dataset.gamePath;
-
-    saveGamePaths(
-      savedGamePaths.filter((entry) => entry !== gamePath)
+  for (const directory of directorySettings) {
+    directory.button?.addEventListener('click', () =>
+      addDirectoryPaths(
+        directory,
+        directory.button,
+        directory.selectMethod,
+        directory.pickerPrompt
+      )
     );
-  });
+    directory.executableButton?.addEventListener('click', () =>
+      addDirectoryPaths(
+        directory,
+        directory.executableButton,
+        'selectExecutables',
+        'Select executable files...'
+      )
+    );
+    directory.list.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-directory-path]');
+      if (!button) return;
+
+      const directoryPath = button.dataset.directoryPath;
+      saveDirectoryPaths(
+        directory,
+        directory.paths.filter((entry) => entry !== directoryPath)
+      );
+    });
+    directory.list.addEventListener('change', (event) => {
+      const input = event.target.closest('[data-executable-path]');
+      if (input) saveExecutableNickname(directory, input);
+    });
+  }
 
   // Close the timezone dropdown when clicking outside it.
   document.addEventListener('pointerdown', (event) => {

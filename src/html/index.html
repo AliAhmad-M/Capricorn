@@ -111,21 +111,34 @@
             <div class="settings-section-heading">
               <h2 class="settings-section-title">Game libraries</h2>
               <p class="settings-section-description">
-                Choose where Capri should look for installed games.
+                Choose where Capri should look for installed games, or add executable files directly.
               </p>
             </div>
 
-            <button
-              id="add-game-paths"
-              class="settings-add-path"
-              type="button"
-              disabled
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M12 5v14M5 12h14"/>
-              </svg>
-              <span>Add folder</span>
-            </button>
+            <div class="settings-path-actions">
+              <button
+                id="add-game-paths"
+                class="settings-add-path"
+                type="button"
+                disabled
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <span>Add folder</span>
+              </button>
+              <button
+                id="add-game-executables"
+                class="settings-add-path settings-add-path-secondary"
+                type="button"
+                disabled
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <span>Add executable</span>
+              </button>
+            </div>
           </div>
 
           <ul id="game-paths-list" class="settings-path-list" aria-label="Configured game libraries">
@@ -134,6 +147,52 @@
 
           <p
             id="game-paths-status"
+            class="settings-status"
+            role="status"
+            aria-live="polite"
+          ></p>
+        </section>
+        <section class="settings-game-paths">
+          <div class="settings-game-paths-header">
+            <div class="settings-section-heading">
+              <h2 class="settings-section-title">Software folders</h2>
+              <p class="settings-section-description">
+                Choose where Capri should look for software, or add executable files directly.
+              </p>
+            </div>
+
+            <div class="settings-path-actions">
+              <button
+                id="add-software-paths"
+                class="settings-add-path"
+                type="button"
+                disabled
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <span>Add folder</span>
+              </button>
+              <button
+                id="add-software-executables"
+                class="settings-add-path settings-add-path-secondary"
+                type="button"
+                disabled
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <span>Add executable</span>
+              </button>
+            </div>
+          </div>
+
+          <ul id="software-paths-list" class="settings-path-list" aria-label="Configured software folders">
+            <li class="settings-path-empty settings-path-loading">Loading software folders...</li>
+          </ul>
+
+          <p
+            id="software-paths-status"
             class="settings-status"
             role="status"
             aria-live="polite"

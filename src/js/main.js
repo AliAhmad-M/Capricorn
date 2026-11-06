@@ -27,10 +27,35 @@ let settingsOpenedFromPortrait = false;
 // Conversation lives here so every window shares it
 let history = [];
 let transcript = [];
-let appSettings = { timeZone: 'Asia/Karachi', gamePaths: [], userName: '' };
+let appSettings = {
+  timeZone: 'Asia/Karachi',
+  gamePaths: [],
+  softwarePaths: [],
+  gameExecutableNicknames: {},
+  softwareExecutableNicknames: {},
+  userName: '',
+};
 
 function normalizeUserName(userName) {
   return typeof userName === 'string' ? userName.trim().slice(0, 60) : '';
+}
+
+function normalizeExecutableNicknames(nicknames) {
+  if (!nicknames || typeof nicknames !== 'object' || Array.isArray(nicknames)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(nicknames).filter(
+      ([executablePath, nickname]) =>
+        typeof executablePath === 'string' &&
+        typeof nickname === 'string' &&
+        nickname.trim()
+    ).map(([executablePath, nickname]) => [
+      executablePath,
+      nickname.trim().slice(0, 60)
+    ])
+  );
 }
 
 function isValidTimeZone(timeZone) {
@@ -81,6 +106,15 @@ async function loadSettings() {
       gamePaths: Array.isArray(savedSettings.gamePaths)
         ? savedSettings.gamePaths.filter((folder) => typeof folder === 'string')
         : [],
+      softwarePaths: Array.isArray(savedSettings.softwarePaths)
+        ? savedSettings.softwarePaths.filter((folder) => typeof folder === 'string')
+        : [],
+      gameExecutableNicknames: normalizeExecutableNicknames(
+        savedSettings.gameExecutableNicknames
+      ),
+      softwareExecutableNicknames: normalizeExecutableNicknames(
+        savedSettings.softwareExecutableNicknames
+      ),
       userName: normalizeUserName(savedSettings.userName),
     };
     await writeSettings(appSettings);
@@ -97,6 +131,15 @@ async function loadSettings() {
     gamePaths: Array.isArray(savedSettings.gamePaths)
       ? savedSettings.gamePaths.filter((folder) => typeof folder === 'string')
       : [],
+    softwarePaths: Array.isArray(savedSettings.softwarePaths)
+      ? savedSettings.softwarePaths.filter((folder) => typeof folder === 'string')
+      : [],
+    gameExecutableNicknames: normalizeExecutableNicknames(
+      savedSettings.gameExecutableNicknames
+    ),
+    softwareExecutableNicknames: normalizeExecutableNicknames(
+      savedSettings.softwareExecutableNicknames
+    ),
     userName: normalizeUserName(savedSettings.userName),
   };
 }
@@ -309,21 +352,98 @@ ipcMain.handle('settings:set-user-name', async (_event, userName) => {
   appSettings = updatedSettings;
   return { ...appSettings };
 });
+ipcMain.handle(
+  'settings:set-executable-nickname',
+  async (_event, category, executablePath, nickname) => {
+    const categorySettings = {
+      game: {
+        pathsKey: 'gamePaths',
+        nicknamesKey: 'gameExecutableNicknames'
+      },
+      software: {
+        pathsKey: 'softwarePaths',
+        nicknamesKey: 'softwareExecutableNicknames'
+      }
+    }[category];
 
-// Open a native dialog for selecting multiple game directories.
+    if (!categorySettings) {
+      throw new Error('Choose games or software for the executable nickname.');
+    }
+    if (
+      typeof executablePath !== 'string' ||
+      path.extname(executablePath).toLowerCase() !== '.exe'
+    ) {
+      throw new Error('Choose a configured executable.');
+    }
+    if (typeof nickname !== 'string' || nickname.length > 60) {
+      throw new Error('Nickname must be 60 characters or fewer.');
+    }
+
+    const resolvedExecutable = await fs.realpath(executablePath);
+    const executableStats = await fs.stat(resolvedExecutable);
+    if (!executableStats.isFile()) {
+      throw new Error('Choose a configured executable file.');
+    }
+
+    const isConfigured = appSettings[categorySettings.pathsKey].some(
+      (configuredPath) => configuredPath.toLowerCase() === resolvedExecutable.toLowerCase()
+    );
+    if (!isConfigured) {
+      throw new Error('That executable is no longer configured.');
+    }
+
+    const nicknames = {
+      ...appSettings[categorySettings.nicknamesKey]
+    };
+    const trimmedNickname = nickname.trim();
+    if (trimmedNickname) {
+      nicknames[resolvedExecutable] = trimmedNickname;
+    } else {
+      delete nicknames[resolvedExecutable];
+    }
+
+    const updatedSettings = {
+      ...appSettings,
+      [categorySettings.nicknamesKey]: nicknames
+    };
+    await writeSettings(updatedSettings);
+    appSettings = updatedSettings;
+    return { ...appSettings };
+  }
+);
+
+// Open native dialogs for selecting game libraries and software folders.
 ipcMain.handle('capri-settings:select-game-paths', async () => {
   const result = await dialog.showOpenDialog({
-    title: 'Select Game Directories',
+    title: 'Select Game Library Folders',
     properties: ['openDirectory', 'multiSelections']
   });
 
   return result.canceled ? [] : result.filePaths;
 });
 
-// Validate and save game directories
-ipcMain.handle('capri-settings:set-game-paths', async (_event, paths) => {
+ipcMain.handle('capri-settings:select-software-paths', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Select Software Folders',
+    properties: ['openDirectory', 'multiSelections']
+  });
+
+  return result.canceled ? [] : result.filePaths;
+});
+
+ipcMain.handle('capri-settings:select-executables', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Select Executables',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Applications', extensions: ['exe'] }]
+  });
+
+  return result.canceled ? [] : result.filePaths;
+});
+
+async function saveDirectoryPaths(paths, settingKey, description) {
   if (!Array.isArray(paths)) {
-    throw new Error('Invalid game folder paths.');
+    throw new Error(`Invalid ${description} folder paths.`);
   }
 
   const validPaths = [];
@@ -334,8 +454,11 @@ ipcMain.handle('capri-settings:set-game-paths', async (_event, paths) => {
     const resolved = await fs.realpath(path.resolve(folder.trim()));
     const stats = await fs.stat(resolved);
 
-    if (!stats.isDirectory()) {
-      throw new Error(`Not a directory: ${resolved}`);
+    if (
+      !stats.isDirectory() &&
+      !(stats.isFile() && path.extname(resolved).toLowerCase() === '.exe')
+    ) {
+      throw new Error(`Not a ${description} folder or executable: ${resolved}`);
     }
 
     validPaths.push(resolved);
@@ -348,11 +471,30 @@ ipcMain.handle('capri-settings:set-game-paths', async (_event, paths) => {
     ).values()
   ];
 
-  const updatedSettings = { ...appSettings, gamePaths: uniquePaths };
+  const updatedSettings = { ...appSettings, [settingKey]: uniquePaths };
+  const nicknamesKey = settingKey === 'gamePaths'
+    ? 'gameExecutableNicknames'
+    : 'softwareExecutableNicknames';
+  const configuredExecutablePaths = new Set(
+    uniquePaths.map((configuredPath) => configuredPath.toLowerCase())
+  );
+  updatedSettings[nicknamesKey] = Object.fromEntries(
+    Object.entries(appSettings[nicknamesKey]).filter(([executablePath]) =>
+      configuredExecutablePaths.has(executablePath.toLowerCase())
+    )
+  );
   await writeSettings(updatedSettings);
   appSettings = updatedSettings;
-  return [...appSettings.gamePaths];
-});
+  return [...appSettings[settingKey]];
+}
+
+ipcMain.handle('capri-settings:set-game-paths', (_event, paths) =>
+  saveDirectoryPaths(paths, 'gamePaths', 'game')
+);
+
+ipcMain.handle('capri-settings:set-software-paths', (_event, paths) =>
+  saveDirectoryPaths(paths, 'softwarePaths', 'software')
+);
 
 ipcMain.handle('capri:ask', async (event, query) => {
   // Wait for warmup

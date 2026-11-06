@@ -32,7 +32,20 @@ contextBridge.exposeInMainWorld('capriSettings', {
   setTimeZone: (timeZone) => ipcRenderer.invoke('settings:set-time-zone', timeZone),
   setUserName: (userName) =>
     ipcRenderer.invoke('settings:set-user-name', userName),
+  setExecutableNickname: (category, executablePath, nickname) =>
+    ipcRenderer.invoke(
+      'settings:set-executable-nickname',
+      category,
+      executablePath,
+      nickname
+    ),
   selectGamePaths: () => ipcRenderer.invoke('capri-settings:select-game-paths'),
   setGamePaths: (paths) =>
     ipcRenderer.invoke('capri-settings:set-game-paths', paths),
+  selectSoftwarePaths: () =>
+    ipcRenderer.invoke('capri-settings:select-software-paths'),
+  selectExecutables: () =>
+    ipcRenderer.invoke('capri-settings:select-executables'),
+  setSoftwarePaths: (paths) =>
+    ipcRenderer.invoke('capri-settings:set-software-paths', paths),
 });
