@@ -23,6 +23,25 @@ const toolDefinitions = [
         required: ['url']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_current_datetime',
+      description:
+        'Get the current date and time. Use for questions about today, ' +
+        'tomorrow, yesterday, or the current time. Defaults to the saved timezone setting.',
+      parameters: {
+        type: 'object',
+        properties: {
+          timeZone: {
+            type: 'string',
+            description: 'IANA timezone, e.g. Asia/Karachi or Europe/London.'
+          }
+        },
+        required: []
+      }
+    }
   }
 ];
 
@@ -64,26 +83,44 @@ async function fetchUrl({ url }) {
   return text || '(No readable text found on this page.)';
 }
 
+// Function to get the date and time
+async function getCurrentDateTime({ timeZone = 'Asia/Karachi' } = {}) {
+  const now = new Date();
+
+  const localTime = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    dateStyle: 'full',
+    timeStyle: 'long'
+  }).format(now);
+
+  return `Current date and time: ${localTime}\nUTC: ${now.toISOString()}`;
+}
+
 const toolImplementations = {
-  fetch_url: fetchUrl
+  fetch_url: fetchUrl,
+  get_current_datetime: getCurrentDateTime
 };
 
 // Executes one tool call and returns { ok, result | error }
-async function executeToolCall(toolCall) {
+async function executeToolCall(toolCall, settings = {}) {
   const name = toolCall.function.name;
   const rawArgs = toolCall.function.arguments;
-  const args =
+  const parsedArgs =
     typeof rawArgs === 'string' ? JSON.parse(rawArgs || '{}') : rawArgs || {};
-
+  const args = parsedArgs && typeof parsedArgs === 'object' ? parsedArgs : {};
   const fn = toolImplementations[name];
   if (!fn) return { ok: false, error: `Unknown tool: ${name}` };
 
   try {
-    const result = await fn(args);
+    const effectiveArgs =
+      name === 'get_current_datetime' && !args.timeZone
+        ? { ...args, timeZone: settings.timeZone }
+        : args;
+    const result = await fn(effectiveArgs);
     return { ok: true, result };
   } catch (err) {
     return { ok: false, error: err.message || String(err) };
   }
 }
 
-module.exports = { toolDefinitions, executeToolCall, fetchUrl };
+module.exports = { toolDefinitions, executeToolCall };

@@ -1,35 +1,62 @@
 const ollama = require('ollama').default;
-const { toolDefinitions, executeToolCall, fetchUrl } = require('./tools');
+const { toolDefinitions, executeToolCall } = require('./tools');
 const { CAPRI_SYSTEM_PROMPT } = require('./prompt');
 
 const MODEL           = process.env.OLLAMA_MODEL || 'qwen-local';
 const MAX_TOOL_ROUNDS = 5;
-const MAX_HISTORY = 10;
+const MAX_HISTORY     = 10;
+const KEEP_ALIVE      = '30m';
+
+const OPTIONS = {
+  num_ctx: 2048,
+  temperature: 0.4,
+};
+
+// Builds the model request
+function buildRequest(messages, options = {}) {
+  return {
+    model: MODEL,
+    messages,
+    tools: toolDefinitions,
+    stream: false,
+    think: false,
+    keep_alive: KEEP_ALIVE,
+    options: { ...OPTIONS, ...options },
+  };
+}
+
+// Trim history to the last MAX_HISTORY messages
+function trimHistory(conversation) {
+  const history = conversation.slice(-MAX_HISTORY);
+  const firstUser = history.findIndex((m) => m.role === 'user');
+  return firstUser === -1 ? [] : history.slice(firstUser);
+}
+
+// Load the model and process the system prompt
+async function warmup() {
+  await ollama.chat(
+    buildRequest(
+      [
+        { role: 'system', content: CAPRI_SYSTEM_PROMPT },
+        { role: 'user', content: 'ping' },
+      ],
+      { num_predict: 1 }
+    )
+  );
+}
 
 // Ask the model a question
-async function ask(query, conversation = []) {
-  const history = conversation.slice(-MAX_HISTORY);
-
+async function ask(query, conversation = [], settings = {}) {
   const messages = [
     { role: 'system', content: CAPRI_SYSTEM_PROMPT },
-    ...history,
-    { role: 'user', content: query }
+    ...trimHistory(conversation),
+    { role: 'user', content: query },
   ];
 
   let round = 0;
 
   while (round < MAX_TOOL_ROUNDS) {
-    const response = await ollama.chat({
-      model: MODEL,
-      messages,
-      tools: toolDefinitions,
-      stream: false,
-      think: false,
-      options: {
-        num_ctx: 2048,
-        temperature: 0.4
-      }
-    });
+    const response = await ollama.chat(buildRequest(messages));
 
     const msg = response.message;
     messages.push(msg);
@@ -45,13 +72,13 @@ async function ask(query, conversation = []) {
         `[capri:tool] ${call.function.name}(${JSON.stringify(call.function.arguments)})`
       );
 
-      const result = await executeToolCall(call);
+      const result = await executeToolCall(call, settings);
       const content = result.ok ? result.result : `Error: ${result.error}`;
 
       messages.push({
         role: 'tool',
         content,
-        tool_name: call.function.name
+        tool_name: call.function.name,
       });
     }
 
@@ -59,9 +86,9 @@ async function ask(query, conversation = []) {
   }
 
   return {
-    text: "Got stuck, choom. Try again.",
-    messages: messages.slice(1)
+    text: 'Got stuck, choom. Try again.',
+    messages: messages.slice(1),
   };
 }
 
-module.exports = { ask };
+module.exports = { ask, warmup };

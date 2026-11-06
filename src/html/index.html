@@ -31,13 +31,13 @@
     </div>
   </div>
 
-  <main class="app">
+  <main id="app" class="app">
     <!-- Portrait panel -->
     <section class="side">
       <div class="portrait-wrap">
         <div class="frame">
           <div class="frame-inner portrait">
-            <img id="sprite" class="sprite" src="../../assets/idle.jpg" alt="Capricorn">
+            <img id="sprite" class="sprite" src="../../assets/idle.jpg" alt="Capricorn" draggable="false">
             <div class="ghost ghost-c" aria-hidden="true"></div>
             <div class="ghost ghost-r" aria-hidden="true"></div>
             <div class="sweep"></div>
@@ -54,6 +54,18 @@
     <section class="main">
       <div class="frame quiet panel-frame">
         <div class="frame-inner panel">
+          <div class="panel-bar">
+            <span class="panel-title">CAPRICORN</span>
+            <div class="panel-actions">
+              <button id="dock" class="dock" type="button"></button>
+              <button id="settings" class="dock settings-button" type="button" aria-label="Settings" title="Settings">
+                <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33h-.08a1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51h-.08a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82v-.08a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1v-.08a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
           <div id="log" class="log" aria-live="polite">
             <p id="empty" class="empty">
               Ask Capricorn to find a file, check the time, send an email or set a reminder.
@@ -73,6 +85,34 @@
       </div>
     </section>
   </main>
+  <main id="settings-page" class="settings-app" hidden>
+    <div class="frame quiet settings-frame">
+      <section class="frame-inner settings-panel">
+        <header class="panel-bar">
+          <span class="panel-title">SETTINGS</span>
+          <button id="settings-back" class="dock" type="button">Back to Capricorn</button>
+        </header>
+        <p class="settings-description">Choose a GMT offset for Capri's date and time answers.</p>
+        <label class="settings-field" for="timezone">
+          <span>Timezone</span>
+          <span class="settings-select-wrap">
+            <select id="timezone" hidden></select>
+            <button id="timezone-toggle" class="settings-select-toggle" type="button"
+                    role="combobox" aria-controls="timezone-options" aria-haspopup="listbox"
+                    aria-expanded="false" aria-label="Timezone" disabled>
+              <span id="timezone-label">Loading timezones...</span>
+              <span class="settings-select-arrow" aria-hidden="true"></span>
+            </button>
+            <div id="timezone-options" class="settings-select-options" role="listbox"
+                 aria-label="Timezone options" hidden></div>
+          </span>
+        </label>
+        <p id="timezone-id" class="settings-timezone-id" aria-live="polite"></p>
+        <p id="settings-status" class="settings-status" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+  </main>
   <script src="../js/renderer.js"></script>
+  <script src="../js/settings.js"></script>
 </body>
 </html>

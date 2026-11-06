@@ -18,6 +18,7 @@ const CONFIG = {
   STEP_MS: 120,
   LOAD_MIN_MS: 1000,
   FONT_TIMEOUT_MS: 3000,
+  WARMUP_TIMEOUT_MS: 130000,
   LOADER_FADE_MS: 250,
   REQUIRE_START: false,
 };
@@ -37,15 +38,22 @@ const elements = {
   form: document.querySelector('#form'),
   input: document.querySelector('#input'),
   sendBtn: document.querySelector('#form .send'),
+  dock: document.querySelector('#dock'),
+  settings: document.querySelector('#settings'),
+  settingsPage: document.querySelector('#settings-page'),
   chips: [...document.querySelectorAll('.chip')],
 };
+
+// Which window this page is running in
+const VIEW = new URLSearchParams(location.search).get('view') || 'full';
+document.body.dataset.view = VIEW;
+const winApi = window.capriWindow;
 
 const appState = {
   current: 'idle',
   busy: false,
+  localRun: false,
 };
-
-let conversation = [];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const spritePath = (key) => `${CONFIG.ASSET_DIR}/${CONFIG.FILES[key]}.jpg`;
@@ -112,6 +120,16 @@ async function runLoadingScreen() {
         sleep(CONFIG.FONT_TIMEOUT_MS).then(() => false),
       ]),
     },
+    {
+      // Load the model and system prompt through main
+      label: 'model/system-prompt',
+      run: Promise.race([
+        window.capri?.warmup
+          ? window.capri.warmup().catch(() => false)
+          : Promise.resolve(true),
+        sleep(CONFIG.WARMUP_TIMEOUT_MS).then(() => false),
+      ]),
+    },
   ];
 
   logLine('> boot sequence start');
@@ -143,17 +161,22 @@ async function runLoadingScreen() {
   elements.loader.remove();
 }
 
-function setState(nextState) {
+function setState(nextState, broadcast = true) {
   appState.current = nextState;
+  elements.dock.disabled = nextState !== 'idle';
+  elements.settings.disabled = nextState !== 'idle';
   document.body.dataset.state = nextState;
   showSprite(nextState);
   elements.statusLabel.textContent = CONFIG.LABELS[nextState];
 
   elements.sprite.classList.remove('glitch');
 
-  // Restart glitch animation on state change
+  // Replay animation on state change
   void elements.sprite.offsetWidth;
   elements.sprite.classList.add('glitch');
+
+  // Broadcast sprite across windows
+  if (broadcast) winApi?.sendState(nextState);
 }
 
 function blinkLoop() {
@@ -215,16 +238,16 @@ async function handleRequest(rawQuery) {
   const query = rawQuery.trim();
   if (!query || appState.busy) return;
 
+  appState.localRun = true;
   setBusy(true);
   addMessage('you', query);
 
   let responseText;
   setState('think');
 
-  // Update UI when assistant replies
+  // Update UI when Capri replies
   try {
-    const { text = '', messages } = await ask(query, conversation);
-    if (messages) conversation = messages;
+    const { text = '' } = await ask(query);
     responseText = text;
   } catch (error) {
     responseText = `That request failed: ${error.message}. Try again.`;
@@ -237,6 +260,7 @@ async function handleRequest(rawQuery) {
   await typeOut(addMessage('capri'), responseText);
 
   setState('idle');
+  appState.localRun = false;
   setBusy(false);
 }
 
@@ -252,6 +276,113 @@ function bindEvents() {
     chip.addEventListener('click', () => handleRequest(chip.textContent));
   });
 }
+
+// Drag and double click
+const DRAG_THRESHOLD_PX = 4;
+const CLICK_DELAY_MS = 220;
+
+function initPortraitMode() {
+  const target = document.querySelector('.portrait-wrap');
+  let start = null;
+  let dragging = false;
+  let clickTimer = null;
+
+  // Stop the browser from starting its own image drag
+  target.addEventListener('dragstart', (event) => event.preventDefault());
+
+  target.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    target.setPointerCapture(event.pointerId);
+    start = { x: event.screenX, y: event.screenY };
+    dragging = false;
+    winApi?.dragStart();
+  });
+
+  target.addEventListener('pointermove', (event) => {
+    if (!start) return;
+    const moved = Math.hypot(event.screenX - start.x, event.screenY - start.y);
+    if (!dragging && moved < DRAG_THRESHOLD_PX) return;
+    dragging = true;
+    winApi?.dragMove();
+  });
+
+  function finishPress(isClickAllowed) {
+    if (!start) return;
+    const wasDrag = dragging;
+    start = null;
+    dragging = false;
+    winApi?.dragEnd();
+    if (wasDrag || !isClickAllowed) return;
+    // Wait for double click
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => winApi?.toggleChat(), CLICK_DELAY_MS);
+  }
+
+  target.addEventListener('pointerup', () => finishPress(true));
+  target.addEventListener('pointercancel', () => finishPress(false));
+  target.addEventListener('lostpointercapture', () => finishPress(false));
+
+  target.addEventListener('dblclick', () => {
+    clearTimeout(clickTimer);
+    winApi?.showFull();
+  });
+
+  target.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    winApi?.showMenu();
+  });
+}
+
+// Focus the input when opened and Esc key to close the chat
+function initChatWindow() {
+  winApi?.onFocus(() => elements.input.focus());
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') winApi?.closeChat();
+  });
+}
+
+// State and transcript syncing and switching beteen windows
+function initViewSwitching() {
+  elements.dock.textContent = VIEW === 'full' ? 'Portrait mode' : 'Full view';
+  elements.settings.addEventListener('click', showSettingsPage);
+  elements.dock.addEventListener('click', () => {
+    if (VIEW === 'full') winApi?.showPortrait();
+    else winApi?.showFull();
+  });
+
+  winApi?.onSettingsOpen(showSettingsPage);
+  winApi?.onSettingsClose(hideSettingsPage);
+
+  // Copy state from another window
+  winApi?.onState((state) => {
+    if (appState.localRun) return;
+    setState(state, false);
+    setBusy(state !== 'idle');
+  });
+
+  // Update the messages UI
+  winApi?.onSync((items) => {
+    if (appState.localRun || !items.length) return;
+    elements.log.replaceChildren();
+    items.forEach(({ who, text }) => addMessage(who, text));
+  });
+}
+
+function showSettingsPage() {
+  elements.app.hidden = true;
+  elements.settingsPage.hidden = false;
+  document.body.dataset.view = 'settings';
+}
+
+function hideSettingsPage() {
+  elements.settingsPage.hidden = true;
+  elements.app.hidden = false;
+  document.body.dataset.view = VIEW;
+}
+
+initViewSwitching();
+if (VIEW === 'portrait') initPortraitMode();
+if (VIEW === 'chat') initChatWindow();
 
 showSprite('idle');
 bindEvents();
