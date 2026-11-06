@@ -1,7 +1,7 @@
-# Capri
+# Capricorn
 
-Capri is a desktop chat assistant built with Electron. It uses Groq for its
-conversational model and can use tools such as web search while responding.
+Capricorn is a desktop assistant built with Electron. It uses Groq for its conversational model and can use tools such as web search while responding. 
+It is based on Project Capricorn from the anime Cyberpunk: Edgerunners 2
 
 ## Run Capri
 
@@ -18,7 +18,7 @@ conversational model and can use tools such as web search while responding.
 
    ```env
    GROQ_API_KEY=your_groq_api_key
-   GROQ_MODEL=llama-3.3-70b-versatile
+   GROQ_MODEL=your_model
    ```
 
    Get an API key from [Groq](https://console.groq.com/keys). `GROQ_MODEL` is
