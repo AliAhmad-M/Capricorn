@@ -30,4 +30,9 @@ contextBridge.exposeInMainWorld('capriWindow', {
 contextBridge.exposeInMainWorld('capriSettings', {
   get: () => ipcRenderer.invoke('settings:get'),
   setTimeZone: (timeZone) => ipcRenderer.invoke('settings:set-time-zone', timeZone),
+  setUserName: (userName) =>
+    ipcRenderer.invoke('settings:set-user-name', userName),
+  selectGamePaths: () => ipcRenderer.invoke('capri-settings:select-game-paths'),
+  setGamePaths: (paths) =>
+    ipcRenderer.invoke('capri-settings:set-game-paths', paths),
 });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, Menu, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen, Menu, globalShortcut } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
 const brain = require('./brain');
@@ -27,7 +27,11 @@ let settingsOpenedFromPortrait = false;
 // Conversation lives here so every window shares it
 let history = [];
 let transcript = [];
-let appSettings = { timeZone: 'Asia/Karachi' };
+let appSettings = { timeZone: 'Asia/Karachi', gamePaths: [], userName: '' };
+
+function normalizeUserName(userName) {
+  return typeof userName === 'string' ? userName.trim().slice(0, 60) : '';
+}
 
 function isValidTimeZone(timeZone) {
   if (typeof timeZone !== 'string') return false;
@@ -40,20 +44,61 @@ function isValidTimeZone(timeZone) {
 }
 
 function settingsFile() {
+  return path.join(__dirname, '../../settings.json');
+}
+
+function legacySettingsFile() {
   return path.join(app.getPath('userData'), 'settings.json');
 }
 
+async function writeSettings(settings) {
+  const file = settingsFile();
+  const temporaryFile = `${file}.${process.pid}.tmp`;
+  await fs.writeFile(temporaryFile, `${JSON.stringify(settings, null, 2)}\n`);
+  await fs.rename(temporaryFile, file);
+}
+
 async function loadSettings() {
+  let contents;
   try {
-    const savedSettings = JSON.parse(await fs.readFile(settingsFile(), 'utf8'));
+    contents = await fs.readFile(settingsFile(), 'utf8');
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+
+    try {
+      contents = await fs.readFile(legacySettingsFile(), 'utf8');
+    } catch (legacyError) {
+      if (legacyError.code === 'ENOENT') return;
+      throw legacyError;
+    }
+    const savedSettings = JSON.parse(contents);
     if (!savedSettings || !isValidTimeZone(savedSettings.timeZone)) {
       throw new Error('Saved settings contain an invalid time zone.');
     }
-    appSettings = { ...appSettings, ...savedSettings };
-  } catch (error) {
-    if (error.code === 'ENOENT') return;
-    throw error;
+    appSettings = {
+      ...appSettings,
+      ...savedSettings,
+      gamePaths: Array.isArray(savedSettings.gamePaths)
+        ? savedSettings.gamePaths.filter((folder) => typeof folder === 'string')
+        : [],
+      userName: normalizeUserName(savedSettings.userName),
+    };
+    await writeSettings(appSettings);
+    return;
   }
+
+  const savedSettings = JSON.parse(contents);
+  if (!savedSettings || !isValidTimeZone(savedSettings.timeZone)) {
+    throw new Error('Saved settings contain an invalid time zone.');
+  }
+  appSettings = {
+    ...appSettings,
+    ...savedSettings,
+    gamePaths: Array.isArray(savedSettings.gamePaths)
+      ? savedSettings.gamePaths.filter((folder) => typeof folder === 'string')
+      : [],
+    userName: normalizeUserName(savedSettings.userName),
+  };
 }
 
 function createFullWindow() {
@@ -189,7 +234,7 @@ function openSettingsFromPortrait() {
 
 function closeSettings() {
   fullWin.webContents.send('capri:settings-close');
-  if (settingsOpenedFromPortrait) showFull();
+  if (settingsOpenedFromPortrait) showPortrait();
   settingsOpenedFromPortrait = false;
 }
 
@@ -247,13 +292,70 @@ ipcMain.handle('settings:set-time-zone', async (_event, timeZone) => {
   }
 
   const updatedSettings = { ...appSettings, timeZone };
-  await fs.writeFile(settingsFile(), `${JSON.stringify(updatedSettings, null, 2)}\n`);
+  await writeSettings(updatedSettings);
+  appSettings = updatedSettings;
+  return { ...appSettings };
+});
+ipcMain.handle('settings:set-user-name', async (_event, userName) => {
+  if (typeof userName !== 'string' || userName.length > 60) {
+    throw new Error('Name must be 60 characters or fewer.');
+  }
+
+  const updatedSettings = {
+    ...appSettings,
+    userName: normalizeUserName(userName),
+  };
+  await writeSettings(updatedSettings);
   appSettings = updatedSettings;
   return { ...appSettings };
 });
 
+// Open a native dialog for selecting multiple game directories.
+ipcMain.handle('capri-settings:select-game-paths', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Select Game Directories',
+    properties: ['openDirectory', 'multiSelections']
+  });
+
+  return result.canceled ? [] : result.filePaths;
+});
+
+// Validate and save game directories
+ipcMain.handle('capri-settings:set-game-paths', async (_event, paths) => {
+  if (!Array.isArray(paths)) {
+    throw new Error('Invalid game folder paths.');
+  }
+
+  const validPaths = [];
+
+  for (const folder of paths) {
+    if (typeof folder !== 'string' || !folder.trim()) continue;
+
+    const resolved = await fs.realpath(path.resolve(folder.trim()));
+    const stats = await fs.stat(resolved);
+
+    if (!stats.isDirectory()) {
+      throw new Error(`Not a directory: ${resolved}`);
+    }
+
+    validPaths.push(resolved);
+  }
+
+  // Remove duplicates
+  const uniquePaths = [
+    ...new Map(
+      validPaths.map(folder => [folder.toLowerCase(), folder])
+    ).values()
+  ];
+
+  const updatedSettings = { ...appSettings, gamePaths: uniquePaths };
+  await writeSettings(updatedSettings);
+  appSettings = updatedSettings;
+  return [...appSettings.gamePaths];
+});
+
 ipcMain.handle('capri:ask', async (event, query) => {
-  // A message sent during warm-up waits for it instead of racing it
+  // Wait for warmup
   await warmUp();
 
   transcript.push({ who: 'you', text: String(query) });

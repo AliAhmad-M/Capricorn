@@ -514,7 +514,7 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
   position: relative;
   z-index: 1;
   height: 100vh;
-  padding: 24px;
+  padding: clamp(16px, 3vw, 32px);
 }
 
 #app[hidden],
@@ -523,7 +523,7 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
 }
 
 .settings-frame {
-  max-width: 760px;
+  max-width: 880px;
   height: 100%;
   margin: 0 auto;
   filter: drop-shadow(0 0 14px rgba(0, 240, 255, 0.18));
@@ -532,23 +532,107 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
 .settings-panel {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  align-items: stretch;
+  gap: 20px;
   height: 100%;
-  padding: 24px;
+  padding: clamp(20px, 3vw, 32px);
+  overflow-y: auto;
   background: rgba(6, 0, 14, 0.8);
+  scrollbar-color: var(--cyan) rgba(255, 255, 255, 0.05);
 }
 
-.settings-description,
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex: 0 0 auto;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.settings-page-description {
+  margin: 6px 0 0;
+  color: var(--steel);
+  font-size: 13px;
+}
+
+.settings-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.settings-panel::-webkit-scrollbar-thumb {
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+}
+
+.settings-panel::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .settings-status {
   margin: 0;
   color: var(--steel);
+}
+
+.settings-user,
+.settings-game-paths,
+.settings-timezone {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 0 0 auto;
+  padding: 22px;
+  border: 1px solid rgba(0, 240, 255, 0.14);
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.035), rgba(255, 255, 255, 0.018) 55%);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
 }
 
 .settings-field {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 460px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.settings-field-label {
+  color: var(--steel);
+  font-size: 13px;
+}
+
+.settings-optional {
+  color: var(--steel);
+  font-size: 11px;
+}
+
+.settings-text-input {
+  width: 100%;
+  max-width: 520px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  border-radius: 0;
+  outline: none;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.32);
+  font: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.settings-text-input::placeholder {
+  color: var(--steel);
+  opacity: 0.65;
+}
+
+.settings-text-input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.16);
+}
+
+.settings-text-input:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 .settings-select-wrap {
@@ -642,8 +726,6 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
   display: none;
 }
 
-
-
 .settings-select-arrow {
   position: absolute;
   top: 50%;
@@ -656,14 +738,273 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
   transform: translateY(-70%) rotate(45deg);
 }
 
-.settings-timezone-id {
-  margin: -12px 0 0;
+.settings-game-paths-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.settings-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-section-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.settings-section-description {
+  margin: 2px 0 0;
   color: var(--steel);
   font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-add-path {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-height: 34px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #061014;
+  background: var(--cyan);
+  border: 1px solid var(--cyan);
+  padding: 6px 11px;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  transition: background 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+
+.settings-add-path:hover:not(:disabled) {
+  background: #8af8ff;
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.28);
+}
+
+.settings-add-path svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.settings-add-path:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.settings-path-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 220px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 1px 5px 1px 1px;
+  scrollbar-color: var(--cyan) rgba(255, 255, 255, 0.05);
+}
+
+.settings-path-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.settings-path-list::-webkit-scrollbar-thumb {
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+}
+
+.settings-path-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.settings-path-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: rgba(0, 0, 0, 0.2);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.settings-path-item:hover {
+  border-color: rgba(0, 240, 255, 0.24);
+  background: rgba(0, 240, 255, 0.035);
+}
+
+.settings-folder-icon {
+  width: 19px;
+  height: 19px;
+  justify-self: center;
+  fill: none;
+  stroke: var(--cyan);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+  opacity: 0.8;
+}
+
+.settings-path-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-path-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-path-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--steel);
+  font-size: 13px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-path-remove {
+  min-width: 82px;
+  min-height: 36px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  color: #a7b0bc;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 6px 12px;
+  transition: color 0.2s, border-color 0.2s, background 0.2s, opacity 0.2s;
+  opacity: 0.72;
+}
+
+.settings-path-remove:hover {
+  color: var(--red);
+  border-color: var(--red);
+  background: rgba(255, 42, 109, 0.08);
+  opacity: 1;
+}
+
+.settings-path-empty {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 94px;
+  padding: 16px 20px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.settings-path-empty .settings-folder-icon {
+  width: 24px;
+  height: 24px;
+  opacity: 0.55;
+}
+
+.settings-empty-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-empty-copy strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.settings-empty-copy span {
+  color: var(--steel);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-path-loading {
+  display: flex;
+  color: var(--steel);
+  font-size: 12px;
+}
+
+#game-paths-status {
+  margin: 0;
+  font-size: 12px;
+}
+
+.settings-timezone-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 18px;
+}
+
+.settings-timezone-id {
+  margin: 0;
+  color: var(--steel);
+  font-size: 12px;
 }
 
 .settings-status:empty {
   display: none;
+}
+
+@media (max-width: 640px) {
+  .settings-header {
+    align-items: flex-start;
+  }
+
+  .settings-header .dock {
+    flex-shrink: 0;
+    padding: 5px 8px;
+  }
+
+  .settings-user,
+  .settings-game-paths,
+  .settings-timezone {
+    padding: 16px;
+  }
+
+  .settings-game-paths-header {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .settings-add-path {
+    justify-self: start;
+  }
+
+  .settings-path-item {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .settings-path-remove {
+    min-width: 72px;
+    min-height: 34px;
+    padding-inline: 9px;
+  }
 }
 
 /* Portrait-only mode */

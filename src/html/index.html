@@ -71,12 +71,6 @@
               Ask Capricorn to find a file, check the time, send an email or set a reminder.
             </p>
           </div>
-          <!-- <div class="chips">
-            <button class="chip" type="button">What time is it?</button>
-            <button class="chip" type="button">Find my latest resume file</button>
-            <button class="chip" type="button">Email Sam about tomorrow's meeting</button>
-            <button class="chip" type="button">Remind me to stretch at 6 pm</button>
-          </div> -->
           <form id="form" class="composer" autocomplete="off">
             <input id="input" type="text" placeholder="Type a request" aria-label="Request">
             <button class="send" type="submit">Send</button>
@@ -85,30 +79,92 @@
       </div>
     </section>
   </main>
+
+  <!-- Settings  -->
   <main id="settings-page" class="settings-app" hidden>
     <div class="frame quiet settings-frame">
       <section class="frame-inner settings-panel">
-        <header class="panel-bar">
-          <span class="panel-title">SETTINGS</span>
+        <header class="settings-header">
+          <div>
+            <span class="panel-title">SYSTEM SETTINGS</span>
+            <p class="settings-page-description">Configure how Capri finds and launches your games.</p>
+          </div>
           <button id="settings-back" class="dock" type="button">Back to Capricorn</button>
         </header>
-        <p class="settings-description">Choose a GMT offset for Capri's date and time answers.</p>
-        <label class="settings-field" for="timezone">
-          <span>Timezone</span>
-          <span class="settings-select-wrap">
-            <select id="timezone" hidden></select>
-            <button id="timezone-toggle" class="settings-select-toggle" type="button"
-                    role="combobox" aria-controls="timezone-options" aria-haspopup="listbox"
-                    aria-expanded="false" aria-label="Timezone" disabled>
-              <span id="timezone-label">Loading timezones...</span>
-              <span class="settings-select-arrow" aria-hidden="true"></span>
+        <section class="settings-user">
+          <div class="settings-section-heading">
+            <h2 class="settings-section-title">Your name</h2>
+            <p class="settings-section-description">
+              Capri will use this when addressing you. Leave it blank to go without a name.
+            </p>
+          </div>
+          <label class="settings-field" for="user-name">
+            <span class="settings-field-label">Name <span class="settings-optional">(Optional)</span></span>
+            <input id="user-name" class="settings-text-input" type="text"
+                   name="user-name" autocomplete="name" maxlength="60"
+                   placeholder="Enter your name">
+          </label>
+          <p id="user-name-status" class="settings-status" role="status" aria-live="polite"></p>
+        </section>
+        <section class="settings-game-paths">
+          <div class="settings-game-paths-header">
+            <div class="settings-section-heading">
+              <h2 class="settings-section-title">Game libraries</h2>
+              <p class="settings-section-description">
+                Choose where Capri should look for installed games.
+              </p>
+            </div>
+
+            <button
+              id="add-game-paths"
+              class="settings-add-path"
+              type="button"
+              disabled
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              <span>Add folder</span>
             </button>
-            <div id="timezone-options" class="settings-select-options" role="listbox"
-                 aria-label="Timezone options" hidden></div>
-          </span>
-        </label>
-        <p id="timezone-id" class="settings-timezone-id" aria-live="polite"></p>
-        <p id="settings-status" class="settings-status" role="status" aria-live="polite"></p>
+          </div>
+
+          <ul id="game-paths-list" class="settings-path-list" aria-label="Configured game libraries">
+            <li class="settings-path-empty settings-path-loading">Loading libraries...</li>
+          </ul>
+
+          <p
+            id="game-paths-status"
+            class="settings-status"
+            role="status"
+            aria-live="polite"
+          ></p>
+        </section>
+        <section class="settings-timezone">
+          <div class="settings-section-heading">
+            <h2 class="settings-section-title">Timezone</h2>
+            <p class="settings-section-description">
+              Choose the timezone Capri uses when answering date and time questions.
+            </p>
+          </div>
+          <label class="settings-field" for="timezone">
+            <span class="settings-field-label">GMT offset</span>
+            <span class="settings-select-wrap">
+              <select id="timezone" hidden></select>
+              <button id="timezone-toggle" class="settings-select-toggle" type="button"
+                      role="combobox" aria-controls="timezone-options" aria-haspopup="listbox"
+                      aria-expanded="false" aria-label="Timezone" disabled>
+                <span id="timezone-label">Loading timezones...</span>
+                <span class="settings-select-arrow" aria-hidden="true"></span>
+              </button>
+              <div id="timezone-options" class="settings-select-options" role="listbox"
+                   aria-label="Timezone options" hidden></div>
+            </span>
+          </label>
+          <div class="settings-timezone-footer">
+            <p id="timezone-id" class="settings-timezone-id" aria-live="polite"></p>
+            <p id="settings-status" class="settings-status" role="status" aria-live="polite"></p>
+          </div>
+        </section>
       </section>
     </div>
   </main>

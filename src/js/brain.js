@@ -25,6 +25,17 @@ function buildRequest(messages, options = {}) {
   };
 }
 
+// Embed the user profile
+function buildSystemPrompt(settings = {}) {
+  const userName = typeof settings.userName === 'string' ? settings.userName.trim() : '';
+
+  if (!userName) {
+    return CAPRI_SYSTEM_PROMPT;
+  }
+
+  return `${CAPRI_SYSTEM_PROMPT}\nUSER PROFILE\n- Preferred name: ${userName}`;
+}
+
 // Trim history to the last MAX_HISTORY messages
 function trimHistory(conversation) {
   const history = conversation.slice(-MAX_HISTORY);
@@ -48,7 +59,7 @@ async function warmup() {
 // Ask the model a question
 async function ask(query, conversation = [], settings = {}) {
   const messages = [
-    { role: 'system', content: CAPRI_SYSTEM_PROMPT },
+    { role: 'system', content: buildSystemPrompt(settings) },
     ...trimHistory(conversation),
     { role: 'user', content: query },
   ];

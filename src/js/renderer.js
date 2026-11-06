@@ -41,6 +41,7 @@ const elements = {
   dock: document.querySelector('#dock'),
   settings: document.querySelector('#settings'),
   settingsPage: document.querySelector('#settings-page'),
+  settingsBack: document.querySelector('#settings-back'),
   chips: [...document.querySelectorAll('.chip')],
 };
 
@@ -345,6 +346,10 @@ function initChatWindow() {
 function initViewSwitching() {
   elements.dock.textContent = VIEW === 'full' ? 'Portrait mode' : 'Full view';
   elements.settings.addEventListener('click', showSettingsPage);
+  elements.settingsBack.addEventListener('click', () => {
+    hideSettingsPage();
+    winApi?.closeSettings();
+  });
   elements.dock.addEventListener('click', () => {
     if (VIEW === 'full') winApi?.showPortrait();
     else winApi?.showFull();
