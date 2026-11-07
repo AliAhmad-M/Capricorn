@@ -601,6 +601,64 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
   font-size: 13px;
 }
 
+.settings-startup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.settings-checkbox-field {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+}
+
+.settings-checkbox {
+  appearance: none;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  place-content: center;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.32);
+  cursor: pointer;
+}
+
+.settings-checkbox::after {
+  content: "";
+  width: 3px;
+  height: 6px;
+  border: solid #061014;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.12s ease;
+}
+
+.settings-checkbox:checked {
+  border-color: var(--cyan);
+  background: var(--cyan);
+}
+
+.settings-checkbox:checked::after {
+  transform: rotate(45deg) scale(1);
+}
+
+.settings-checkbox:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+.settings-checkbox:disabled {
+  cursor: wait;
+}
+
 .settings-optional {
   color: var(--steel);
   font-size: 11px;

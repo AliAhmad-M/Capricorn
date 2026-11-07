@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld('capriSettings', {
   setTimeZone: (timeZone) => ipcRenderer.invoke('settings:set-time-zone', timeZone),
   setUserName: (userName) =>
     ipcRenderer.invoke('settings:set-user-name', userName),
+  setRequireStart: (requireStart) =>
+    ipcRenderer.invoke('settings:set-require-start', requireStart),
   setExecutableNickname: (category, executablePath, nickname) =>
     ipcRenderer.invoke(
       'settings:set-executable-nickname',

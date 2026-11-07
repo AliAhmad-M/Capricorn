@@ -91,12 +91,6 @@ function getFriendlyErrorMessage(error) {
   if (/unsupported voice recording format/.test(details)) {
     return "This recording format won't play nice with transcription. Try recording again.";
   }
-  if (/recording is too large/.test(details)) {
-    return "That recording is too large to send. Try a shorter one.";
-  }
-  if (/invalid.*audio|audio.*invalid|no audio/.test(details)) {
-    return "I couldn't make sense of that recording. Try recording it again.";
-  }
   if (status === 400 || status === 422) {
     return "Groq couldn't process that request. Check the model settings and try again.";
   }

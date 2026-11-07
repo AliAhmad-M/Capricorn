@@ -99,7 +99,9 @@
         <header class="settings-header">
           <div>
             <span class="panel-title">SYSTEM SETTINGS</span>
-            <p class="settings-page-description">Configure how Capri finds and launches your games.</p>
+            <p class="settings-page-description">
+              Configure Capri's startup behavior and how it finds and launches your games.
+            </p>
           </div>
           <button id="settings-back" class="dock" type="button">Back to Capricorn</button>
         </header>
@@ -117,6 +119,22 @@
                    placeholder="Enter your name">
           </label>
           <p id="user-name-status" class="settings-status" role="status" aria-live="polite"></p>
+        </section>
+        <section class="settings-user">
+          <div class="settings-startup-row">
+            <div class="settings-section-heading">
+              <h2 class="settings-section-title">Startup</h2>
+              <p class="settings-section-description">
+                Wait for a key or click before opening Capri.
+              </p>
+            </div>
+            <label class="settings-checkbox-field" for="require-start"
+                   aria-label="Wait for a key or click before opening Capri">
+              <input id="require-start" class="settings-checkbox" type="checkbox"
+                     name="require-start" disabled>
+            </label>
+          </div>
+          <p id="require-start-status" class="settings-status" role="status" aria-live="polite"></p>
         </section>
         <section class="settings-user">
           <div class="settings-section-heading">

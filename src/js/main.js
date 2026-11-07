@@ -14,6 +14,8 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const brain = require('./brain');
 
+app.setAppUserModelId('com.ali.capricorn');
+
 const PORTRAIT_SIZE = { width: 220, height: 220 };
 const CHAT_SIZE = { width: 400, height: 500 };
 const CHAT_GAP = 12;
@@ -21,7 +23,7 @@ const TOGGLE_KEY = 'CommandOrControl+Alt+C';
 const WARMUP_TIMEOUT_MS = 120000;
 
 const page = path.join(__dirname, '../html/index.html');
-const appIcon = path.join(__dirname, '../../assets/idle_blink.jpg');
+const appIcon = path.join(__dirname, '../../app-icon.ico');
 const webPreferences = {
   preload: path.join(__dirname, 'preload.js'),
   contextIsolation: true,
@@ -46,6 +48,7 @@ let appSettings = {
   gameExecutableNicknames: {},
   softwareExecutableNicknames: {},
   userName: '',
+  requireStart: false,
   groqApiKey: '',
   groqTextModel: '',
   groqVoiceModel: '',
@@ -99,84 +102,75 @@ function isValidTimeZone(timeZone) {
   }
 }
 
+// Use the project settings file in development and a writable per-user file
+// in packaged builds, where the application directory may be read-only.
 function settingsFile() {
-  return path.join(__dirname, '../../settings.json');
+  return app.isPackaged
+    ? path.join(app.getPath('userData'), 'settings.json')
+    : path.join(__dirname, '../../settings.json');
 }
 
+// Fall back to the other location once to migrate existing settings.
 function legacySettingsFile() {
-  return path.join(app.getPath('userData'), 'settings.json');
+  return app.isPackaged
+    ? path.join(__dirname, '../../settings.json')
+    : path.join(app.getPath('userData'), 'settings.json');
 }
 
 async function writeSettings(settings) {
   const file = settingsFile();
+  await fs.mkdir(path.dirname(file), { recursive: true });
   const temporaryFile = `${file}.${process.pid}.tmp`;
   await fs.writeFile(temporaryFile, `${JSON.stringify(settings, null, 2)}\n`);
   await fs.rename(temporaryFile, file);
 }
 
-async function loadSettings() {
-  let contents;
+async function readJsonIfExists(file) {
   try {
-    contents = await fs.readFile(settingsFile(), 'utf8');
+    return JSON.parse(await fs.readFile(file, 'utf8'));
   } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-
-    try {
-      contents = await fs.readFile(legacySettingsFile(), 'utf8');
-    } catch (legacyError) {
-      if (legacyError.code === 'ENOENT') return;
-      throw legacyError;
-    }
-    const savedSettings = JSON.parse(contents);
-    if (!savedSettings || !isValidTimeZone(savedSettings.timeZone)) {
-      throw new Error('Saved settings contain an invalid time zone.');
-    }
-    appSettings = {
-      ...appSettings,
-      ...savedSettings,
-      gamePaths: Array.isArray(savedSettings.gamePaths)
-        ? savedSettings.gamePaths.filter((folder) => typeof folder === 'string')
-        : [],
-      softwarePaths: Array.isArray(savedSettings.softwarePaths)
-        ? savedSettings.softwarePaths.filter((folder) => typeof folder === 'string')
-        : [],
-      gameExecutableNicknames: normalizeExecutableNicknames(
-        savedSettings.gameExecutableNicknames
-      ),
-      softwareExecutableNicknames: normalizeExecutableNicknames(
-        savedSettings.softwareExecutableNicknames
-      ),
-      userName: normalizeUserName(savedSettings.userName),
-      ...normalizeGroqSettings(savedSettings),
-    };
-    delete appSettings.groqModel;
-    await writeSettings(appSettings);
-    return;
+    if (error.code === 'ENOENT') return null;
+    throw error;
   }
+}
 
-  const savedSettings = JSON.parse(contents);
-  if (!savedSettings || !isValidTimeZone(savedSettings.timeZone)) {
+async function loadSettings() {
+  let saved = await readJsonIfExists(settingsFile());
+  let migrated = false;
+
+  if (!saved) {
+    saved = await readJsonIfExists(legacySettingsFile());
+    migrated = Boolean(saved);
+  }
+  // First run: defaults apply, the file is created on the first save
+  if (!saved) return;
+
+  if (!isValidTimeZone(saved.timeZone)) {
     throw new Error('Saved settings contain an invalid time zone.');
   }
+
   appSettings = {
     ...appSettings,
-    ...savedSettings,
-    gamePaths: Array.isArray(savedSettings.gamePaths)
-      ? savedSettings.gamePaths.filter((folder) => typeof folder === 'string')
+    ...saved,
+    gamePaths: Array.isArray(saved.gamePaths)
+      ? saved.gamePaths.filter((folder) => typeof folder === 'string')
       : [],
-    softwarePaths: Array.isArray(savedSettings.softwarePaths)
-      ? savedSettings.softwarePaths.filter((folder) => typeof folder === 'string')
+    softwarePaths: Array.isArray(saved.softwarePaths)
+      ? saved.softwarePaths.filter((folder) => typeof folder === 'string')
       : [],
     gameExecutableNicknames: normalizeExecutableNicknames(
-      savedSettings.gameExecutableNicknames
+      saved.gameExecutableNicknames
     ),
     softwareExecutableNicknames: normalizeExecutableNicknames(
-      savedSettings.softwareExecutableNicknames
+      saved.softwareExecutableNicknames
     ),
-    userName: normalizeUserName(savedSettings.userName),
-    ...normalizeGroqSettings(savedSettings),
+    userName: normalizeUserName(saved.userName),
+    requireStart: saved.requireStart === true,
+    ...normalizeGroqSettings(saved),
   };
   delete appSettings.groqModel;
+
+  if (migrated) await writeSettings(appSettings);
 }
 
 function createFullWindow() {
@@ -431,6 +425,16 @@ ipcMain.handle('settings:set-user-name', async (_event, userName) => {
   await writeSettings(updatedSettings);
   appSettings = updatedSettings;
   return { ...appSettings };
+});
+ipcMain.handle('settings:set-require-start', async (_event, requireStart) => {
+  if (typeof requireStart !== 'boolean') {
+    throw new Error('Require start must be enabled or disabled.');
+  }
+
+  const updatedSettings = { ...appSettings, requireStart };
+  await writeSettings(updatedSettings);
+  appSettings = updatedSettings;
+  return { requireStart };
 });
 ipcMain.handle(
   'settings:set-executable-nickname',

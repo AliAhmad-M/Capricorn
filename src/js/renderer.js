@@ -20,7 +20,6 @@ const CONFIG = {
   FONT_TIMEOUT_MS: 3000,
   WARMUP_TIMEOUT_MS: 130000,
   LOADER_FADE_MS: 250,
-  REQUIRE_START: false,
 };
 
 // Cache the UI elements once
@@ -112,6 +111,10 @@ function waitForStart() {
 }
 
 async function runLoadingScreen() {
+  const settingsPromise = window.capriSettings.get().then(
+    (settings) => ({ ok: true, settings }),
+    (error) => ({ ok: false, error })
+  );
   const tasks = [
     ...Object.keys(CONFIG.FILES).map((key) => ({
       label: `sprite/${CONFIG.FILES[key]}`,
@@ -152,7 +155,21 @@ async function runLoadingScreen() {
   logLine('> loading complete');
   elements.loaderLabel.textContent = 'Ready';
 
-  if (CONFIG.REQUIRE_START) {
+  let requireStart = false;
+  const startupSettings = await settingsPromise;
+  if (!startupSettings.ok) {
+    const errorMessage = startupSettings.error?.message
+      || String(startupSettings.error);
+    console.error('Failed to load startup settings:', startupSettings.error);
+    logLine(
+      `> settings/startup ... FAILED (${errorMessage})`,
+      true
+    );
+  } else {
+    requireStart = startupSettings.settings.requireStart === true;
+  }
+
+  if (requireStart) {
     elements.loader.classList.add('ready');
     await waitForStart();
   } else {

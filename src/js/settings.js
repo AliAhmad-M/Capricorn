@@ -5,6 +5,8 @@
   const status = document.querySelector('#settings-status');
   const userNameInput = document.querySelector('#user-name');
   const userNameStatus = document.querySelector('#user-name-status');
+  const requireStartInput = document.querySelector('#require-start');
+  const requireStartStatus = document.querySelector('#require-start-status');
   const groqApiKeyInput = document.querySelector('#groq-api-key');
   const groqApiKeyStatus = document.querySelector('#groq-api-key-status');
   const groqTextModelInput = document.querySelector('#groq-text-model');
@@ -64,6 +66,7 @@
     if (directory.executableButton) directory.executableButton.disabled = true;
   }
   if (userNameInput) userNameInput.disabled = true;
+  if (requireStartInput) requireStartInput.disabled = true;
   for (const element of [
     groqApiKeyInput,
     groqTextModelInput,
@@ -78,6 +81,7 @@
 
   let savedTimeZone = null;
   let savedUserName = '';
+  let savedRequireStart = false;
   let savedGroqApiKey = '';
   let savedGroqTextModel = '';
   let savedGroqVoiceModel = '';
@@ -223,7 +227,6 @@
     closeOptions();
 
     timeZoneToggle.disabled = true;
-    status.textContent = 'Saving...';
 
     try {
       await window.capriSettings.setTimeZone(timeZone);
@@ -372,7 +375,6 @@
 
     directory.paths = nextPaths;
     renderDirectoryPaths(directory);
-    directory.status.textContent = 'Saving...';
 
     try {
       const result = await window.capriSettings[directory.saveMethod](nextPaths);
@@ -433,7 +435,6 @@
     if (userName === savedUserName) return;
 
     userNameInput.disabled = true;
-    userNameStatus.textContent = 'Saving...';
     try {
       const settings = await window.capriSettings.setUserName(userName);
       savedUserName = settings.userName || '';
@@ -447,6 +448,31 @@
     }
   }
 
+  async function saveRequireStart() {
+    if (!requireStartInput) return;
+    if (!window.capriSettings?.setRequireStart) {
+      requireStartInput.checked = savedRequireStart;
+      requireStartStatus.textContent = 'Startup setting is unavailable.';
+      return;
+    }
+
+    requireStartInput.disabled = true;
+    try {
+      const settings = await window.capriSettings.setRequireStart(
+        requireStartInput.checked
+      );
+      savedRequireStart = settings.requireStart === true;
+      requireStartInput.checked = savedRequireStart;
+      requireStartStatus.textContent = '';
+    } catch (error) {
+      requireStartInput.checked = savedRequireStart;
+      requireStartStatus.textContent =
+        `Couldn't save startup setting: ${error.message}`;
+    } finally {
+      requireStartInput.disabled = false;
+    }
+  }
+
   async function saveGroqApiKey() {
     if (!window.capriSettings?.setGroqApiKey) return;
 
@@ -454,14 +480,11 @@
     if (apiKey === savedGroqApiKey) return;
 
     groqApiKeySaveButton.disabled = true;
-    groqApiKeyStatus.textContent = 'Saving...';
     try {
-      const settings = await window.capriSettings.setGroqApiKey(apiKey);
-      savedGroqApiKey = settings.groqApiKey;
+      await window.capriSettings.setGroqApiKey(apiKey);
+      savedGroqApiKey = apiKey;
       groqApiKeyInput.value = savedGroqApiKey;
-      groqApiKeyStatus.textContent = settings.hasGroqApiKeyOverride
-        ? 'API key saved.'
-        : 'API key saved; using .env value.';
+      groqApiKeyStatus.textContent = '';
     } catch (error) {
       groqApiKeyStatus.textContent = `Couldn't save API key: ${error.message}`;
     } finally {
@@ -474,21 +497,18 @@
 
     const model = input.value.trim();
     if (model === getSavedModel()) {
-      status.textContent = `No ${label} changes to save.`;
+      status.textContent = '';
       return;
     }
 
     button.disabled = true;
-    status.textContent = 'Saving...';
     try {
       const settings = await window.capriSettings[settingMethod](model);
       setSavedModel(settings[settingMethod === 'setGroqTextModel'
         ? 'groqTextModel'
         : 'groqVoiceModel']);
       input.value = getSavedModel();
-      status.textContent = getSavedModel()
-        ? `${label} saved.`
-        : `${label} saved; using the .env value or default.`;
+      status.textContent = '';
     } catch (error) {
       input.value = getSavedModel();
       status.textContent = `Couldn't save ${label.toLowerCase()}: ${error.message}`;
@@ -532,6 +552,10 @@
       settings = await window.capriSettings.get();
     } catch (error) {
       status.textContent = `Couldn't load settings: ${error.message}`;
+      if (requireStartStatus) {
+        requireStartStatus.textContent =
+          `Couldn't load startup setting: ${error.message}`;
+      }
       for (const directory of directorySettings) {
         directory.status.textContent =
           `Couldn't load ${directory.label} settings.`;
@@ -547,6 +571,12 @@
       userNameInput.value = savedUserName;
       userNameInput.disabled = false;
     }
+    savedRequireStart = settings.requireStart === true;
+    if (requireStartInput) {
+      requireStartInput.checked = savedRequireStart;
+      requireStartInput.disabled = false;
+    }
+    // The main process never sends the saved key back, so the field starts empty.
     savedGroqApiKey = typeof settings.groqApiKey === 'string'
       ? settings.groqApiKey
       : '';
@@ -556,11 +586,7 @@
     }
     if (groqApiKeySaveButton) groqApiKeySaveButton.disabled = false;
     if (groqApiKeyToggle) groqApiKeyToggle.disabled = false;
-    if (settings.hasGroqApiKeyOverride) {
-      groqApiKeyStatus.textContent = 'Using the saved API key.';
-    } else {
-      groqApiKeyStatus.textContent = 'Using the API key from .env, if configured.';
-    }
+    groqApiKeyStatus.textContent = '';
     savedGroqTextModel = typeof settings.groqTextModel === 'string'
       ? settings.groqTextModel
       : typeof settings.groqModel === 'string'
@@ -619,6 +645,7 @@
 
   // Timezone dropdown interactions.
   userNameInput?.addEventListener('change', saveUserName);
+  requireStartInput?.addEventListener('change', saveRequireStart);
   groqApiKeySaveButton?.addEventListener('click', () => saveGroqApiKey());
   groqTextModelSaveButton?.addEventListener('click', () =>
     saveGroqModel(
