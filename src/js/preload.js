@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld('capriWindow', {
 
 contextBridge.exposeInMainWorld('capriSettings', {
   get: () => ipcRenderer.invoke('settings:get'),
+  setGroqApiKey: (apiKey) =>
+    ipcRenderer.invoke('settings:set-groq-api-key', apiKey),
+  setGroqModel: (model) =>
+    ipcRenderer.invoke('settings:set-groq-model', model),
   setTimeZone: (timeZone) => ipcRenderer.invoke('settings:set-time-zone', timeZone),
   setUserName: (userName) =>
     ipcRenderer.invoke('settings:set-user-name', userName),

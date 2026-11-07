@@ -11,6 +11,7 @@ const TOGGLE_KEY = 'CommandOrControl+Alt+C';
 const WARMUP_TIMEOUT_MS = 120000;
 
 const page = path.join(__dirname, '../html/index.html');
+const appIcon = path.join(__dirname, '../../assets/idle_blink.jpg');
 const webPreferences = {
   preload: path.join(__dirname, 'preload.js'),
   contextIsolation: true,
@@ -35,7 +36,20 @@ let appSettings = {
   gameExecutableNicknames: {},
   softwareExecutableNicknames: {},
   userName: '',
+  groqApiKey: '',
+  groqModel: '',
 };
+
+function normalizeGroqSettings(settings) {
+  return {
+    groqApiKey: typeof settings.groqApiKey === 'string'
+      ? settings.groqApiKey.trim()
+      : '',
+    groqModel: typeof settings.groqModel === 'string'
+      ? settings.groqModel.trim()
+      : '',
+  };
+}
 
 function normalizeUserName(userName) {
   return typeof userName === 'string' ? userName.trim().slice(0, 60) : '';
@@ -117,6 +131,7 @@ async function loadSettings() {
         savedSettings.softwareExecutableNicknames
       ),
       userName: normalizeUserName(savedSettings.userName),
+      ...normalizeGroqSettings(savedSettings),
     };
     await writeSettings(appSettings);
     return;
@@ -142,6 +157,7 @@ async function loadSettings() {
       savedSettings.softwareExecutableNicknames
     ),
     userName: normalizeUserName(savedSettings.userName),
+    ...normalizeGroqSettings(savedSettings),
   };
 }
 
@@ -154,6 +170,7 @@ function createFullWindow() {
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     title: 'Capricorn',
+    icon: appIcon,
     webPreferences,
   });
   fullWin.loadFile(page, { query: { view: 'full' } });
@@ -175,6 +192,7 @@ function createOverlay(view, size, position = {}) {
     alwaysOnTop: true,
     skipTaskbar: true,
     title: 'Capricorn',
+    icon: appIcon,
     webPreferences,
   });
   win.loadFile(page, { query: { view } });
@@ -297,7 +315,7 @@ function warmUp() {
     });
 
     const run = Promise.resolve()
-      .then(() => brain.warmup())
+      .then(() => brain.warmup({ ...appSettings }))
       .then(() => true)
       .catch((error) => {
         console.error('warmup failed:', error.message);
@@ -329,7 +347,42 @@ async function askBrain(text, settings) {
 }
 
 ipcMain.handle('capri:warmup', () => warmUp());
-ipcMain.handle('settings:get', () => ({ ...appSettings }));
+ipcMain.handle('settings:get', () => {
+  const { groqApiKey, ...settings } = appSettings;
+  return {
+    ...settings,
+    ...brain.getConfiguration(appSettings),
+    hasGroqApiKeyOverride: Boolean(groqApiKey),
+  };
+});
+
+async function saveGroqSetting(setting, value) {
+  const updatedSettings = { ...appSettings, [setting]: value };
+  await writeSettings(updatedSettings);
+  appSettings = updatedSettings;
+  warmupPromise = null;
+  return {
+    ...brain.getConfiguration(appSettings),
+    hasGroqApiKeyOverride: Boolean(appSettings.groqApiKey),
+  };
+}
+
+ipcMain.handle('settings:set-groq-api-key', async (_event, apiKey) => {
+  if (typeof apiKey !== 'string' || apiKey.length > 512) {
+    throw new Error('Groq API key must be 512 characters or fewer.');
+  }
+
+  return saveGroqSetting('groqApiKey', apiKey.trim());
+});
+
+ipcMain.handle('settings:set-groq-model', async (_event, model) => {
+  if (typeof model !== 'string' || model.length > 200) {
+    throw new Error('Groq model must be 200 characters or fewer.');
+  }
+
+  return saveGroqSetting('groqModel', model.trim());
+});
+
 ipcMain.handle('settings:set-time-zone', async (_event, timeZone) => {
   if (!isValidTimeZone(timeZone)) {
     throw new Error('Choose a valid IANA time zone.');

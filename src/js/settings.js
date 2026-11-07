@@ -5,6 +5,13 @@
   const status = document.querySelector('#settings-status');
   const userNameInput = document.querySelector('#user-name');
   const userNameStatus = document.querySelector('#user-name-status');
+  const groqApiKeyInput = document.querySelector('#groq-api-key');
+  const groqApiKeyStatus = document.querySelector('#groq-api-key-status');
+  const groqModelInput = document.querySelector('#groq-model');
+  const groqModelStatus = document.querySelector('#groq-model-status');
+  const groqApiKeySaveButton = document.querySelector('#save-groq-api-key');
+  const groqModelSaveButton = document.querySelector('#save-groq-model');
+  const groqApiKeyToggle = document.querySelector('#toggle-groq-api-key');
 
   if (!timeZoneSelect) return;
 
@@ -54,9 +61,20 @@
     if (directory.executableButton) directory.executableButton.disabled = true;
   }
   if (userNameInput) userNameInput.disabled = true;
+  for (const element of [
+    groqApiKeyInput,
+    groqModelInput,
+    groqApiKeySaveButton,
+    groqModelSaveButton,
+    groqApiKeyToggle,
+  ]) {
+    if (element) element.disabled = true;
+  }
 
   let savedTimeZone = null;
   let savedUserName = '';
+  let savedGroqApiKey = '';
+  let savedGroqModel = '';
 
   // Get the current UTC offset for a timezone.
   function getOffsetMinutes(timeZone) {
@@ -423,6 +441,54 @@
     }
   }
 
+  async function saveGroqApiKey() {
+    if (!window.capriSettings?.setGroqApiKey) return;
+
+    const apiKey = groqApiKeyInput.value.trim();
+    if (apiKey === savedGroqApiKey) return;
+
+    groqApiKeySaveButton.disabled = true;
+    groqApiKeyStatus.textContent = 'Saving...';
+    try {
+      const settings = await window.capriSettings.setGroqApiKey(apiKey);
+      savedGroqApiKey = settings.groqApiKey;
+      groqApiKeyInput.value = savedGroqApiKey;
+      groqApiKeyStatus.textContent = settings.hasGroqApiKeyOverride
+        ? 'API key saved.'
+        : 'API key saved; using .env value.';
+    } catch (error) {
+      groqApiKeyStatus.textContent = `Couldn't save API key: ${error.message}`;
+    } finally {
+      groqApiKeySaveButton.disabled = false;
+    }
+  }
+
+  async function saveGroqModel() {
+    if (!window.capriSettings?.setGroqModel) return;
+
+    const model = groqModelInput.value.trim();
+    if (model === savedGroqModel) {
+      groqModelStatus.textContent = 'No model changes to save.';
+      return;
+    }
+
+    groqModelSaveButton.disabled = true;
+    groqModelStatus.textContent = 'Saving...';
+    try {
+      const settings = await window.capriSettings.setGroqModel(model);
+      savedGroqModel = settings.groqModel;
+      groqModelInput.value = savedGroqModel;
+      groqModelStatus.textContent = savedGroqModel
+        ? 'Model saved.'
+        : 'Model saved; using the .env value or default.';
+    } catch (error) {
+      groqModelInput.value = savedGroqModel;
+      groqModelStatus.textContent = `Couldn't save model: ${error.message}`;
+    } finally {
+      groqModelSaveButton.disabled = false;
+    }
+  }
+
   async function addDirectoryPaths(directory, button, selectMethod, prompt) {
     if (!window.capriSettings?.[selectMethod]) {
       directory.status.textContent = 'Path selection is unavailable.';
@@ -473,6 +539,28 @@
       userNameInput.value = savedUserName;
       userNameInput.disabled = false;
     }
+    savedGroqApiKey = typeof settings.groqApiKey === 'string'
+      ? settings.groqApiKey
+      : '';
+    if (groqApiKeyInput) {
+      groqApiKeyInput.value = savedGroqApiKey;
+      groqApiKeyInput.disabled = false;
+    }
+    if (groqApiKeySaveButton) groqApiKeySaveButton.disabled = false;
+    if (groqApiKeyToggle) groqApiKeyToggle.disabled = false;
+    if (settings.hasGroqApiKeyOverride) {
+      groqApiKeyStatus.textContent = 'Using the saved API key.';
+    } else {
+      groqApiKeyStatus.textContent = 'Using the API key from .env, if configured.';
+    }
+    savedGroqModel = typeof settings.groqModel === 'string'
+      ? settings.groqModel
+      : '';
+    if (groqModelInput) {
+      groqModelInput.value = savedGroqModel;
+      groqModelInput.disabled = false;
+    }
+    if (groqModelSaveButton) groqModelSaveButton.disabled = false;
 
     try {
       const timeZone = settings.timeZone || 'Asia/Karachi';
@@ -513,6 +601,18 @@
 
   // Timezone dropdown interactions.
   userNameInput?.addEventListener('change', saveUserName);
+  groqApiKeySaveButton?.addEventListener('click', () => saveGroqApiKey());
+  groqModelSaveButton?.addEventListener('click', () => saveGroqModel());
+  groqApiKeyToggle?.addEventListener('click', () => {
+    const showApiKey = groqApiKeyInput.type === 'password';
+    groqApiKeyInput.type = showApiKey ? 'text' : 'password';
+    groqApiKeyToggle.setAttribute('aria-pressed', String(showApiKey));
+    groqApiKeyToggle.setAttribute(
+      'aria-label',
+      showApiKey ? 'Hide API key' : 'Show API key'
+    );
+    groqApiKeyToggle.title = showApiKey ? 'Hide API key' : 'Show API key';
+  });
   userNameInput?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();

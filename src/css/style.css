@@ -635,6 +635,62 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
   cursor: wait;
 }
 
+.settings-secret-input {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 520px;
+}
+
+.settings-secret-input .settings-text-input {
+  padding-right: 48px;
+}
+
+.settings-secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 5px;
+  border: 0;
+  color: var(--steel);
+  background: transparent;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.settings-secret-toggle:hover,
+.settings-secret-toggle:focus-visible {
+  color: var(--cyan);
+  outline: none;
+}
+
+.settings-secret-toggle:disabled {
+  cursor: wait;
+}
+
+.settings-secret-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.settings-secret-eye-slash {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.settings-secret-toggle[aria-pressed="true"] .settings-secret-eye-slash {
+  opacity: 1;
+}
+
 .settings-select-wrap {
   position: relative;
 }
@@ -751,6 +807,20 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.settings-save-row {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  max-width: 520px;
+}
+
+.settings-save-button {
+  min-height: 30px;
+  min-width: 128px;
+  padding: 4px 9px;
+  font-size: 11px;
 }
 
 .settings-add-path-secondary {
@@ -1263,9 +1333,7 @@ body[data-view="chat"] .composer-mic:hover:not(:disabled) {
   flex: 0 0 48px;
   align-items: center;
   justify-content: center;
-  font: inherit;
-  font-weight: 700;
-  font-size: 15px;
+  min-width: 64px;
   background: var(--yellow);
   color: #000;
   border: 0;

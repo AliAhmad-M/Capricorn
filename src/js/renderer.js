@@ -339,7 +339,7 @@ function initChatWindow() {
 
 // State and transcript syncing and switching beteen windows
 function initViewSwitching() {
-  elements.dock.textContent = VIEW === 'full' ? 'Portrait mode' : 'Full view';
+  elements.dock.textContent = VIEW === 'full' ? 'Mini view' : 'Full view';
   elements.settings.addEventListener('click', showSettingsPage);
   elements.settingsBack.addEventListener('click', () => {
     hideSettingsPage();

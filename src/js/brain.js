@@ -2,24 +2,37 @@ const Groq = require('groq-sdk');
 const { toolDefinitions, executeToolCall } = require('./tools');
 const { CAPRI_SYSTEM_PROMPT } = require('./prompt');
 
-const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
 const MAX_TOOL_ROUNDS = 5;
 const MAX_HISTORY = 10;
 
 let client;
+let clientApiKey;
 
-function getClient() {
-  const apiKey = process.env.GROQ_API_KEY;
+function getClient(settings = {}) {
+  const apiKey = settings.groqApiKey || process.env.GROQ_API_KEY;
 
   if (!apiKey) {
-    throw new Error('Set GROQ_API_KEY in the project .env file to use Capri.');
+    throw new Error('Set a Groq API key in Settings or the project .env file to use Capri.');
   }
 
-  if (!client) {
+  if (!client || clientApiKey !== apiKey) {
     client = new Groq({ apiKey });
+    clientApiKey = apiKey;
   }
 
   return client;
+}
+
+function getModel(settings = {}) {
+  return settings.groqModel || process.env.GROQ_MODEL || DEFAULT_MODEL;
+}
+
+function getConfiguration(settings = {}) {
+  return {
+    groqApiKey: settings.groqApiKey || process.env.GROQ_API_KEY || '',
+    groqModel: getModel(settings),
+  };
 }
 
 // Embed the user profile
@@ -41,9 +54,9 @@ function trimHistory(conversation) {
 }
 
 // Verify Groq credentials and connectivity before the UI finishes loading.
-async function warmup() {
-  await getClient().chat.completions.create({
-    model: MODEL,
+async function warmup(settings = {}) {
+  await getClient(settings).chat.completions.create({
+    model: getModel(settings),
     messages: [
       { role: 'system', content: CAPRI_SYSTEM_PROMPT },
       { role: 'user', content: 'ping' },
@@ -63,8 +76,8 @@ async function ask(query, conversation = [], settings = {}) {
   let round = 0;
 
   while (round < MAX_TOOL_ROUNDS) {
-    const response = await getClient().chat.completions.create({
-      model: MODEL,
+    const response = await getClient(settings).chat.completions.create({
+      model: getModel(settings),
       messages,
       tools: toolDefinitions,
       temperature: 0.4,
@@ -103,4 +116,4 @@ async function ask(query, conversation = [], settings = {}) {
   };
 }
 
-module.exports = { ask, warmup };
+module.exports = { ask, warmup, getConfiguration };
