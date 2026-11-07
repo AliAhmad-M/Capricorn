@@ -330,7 +330,7 @@ function drawMeter(now) {
     const n = (v - 128) / 128;
     sum += n * n;
   }
-  const level = Math.min(1, Math.sqrt(sum / data.length) * 10);
+  const level = Math.min(1, Math.sqrt(sum / data.length) * 5);
 
   if (now - voice.lastBar >= VOICE.BAR_INTERVAL_MS) {
     voice.lastBar = now;

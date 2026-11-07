@@ -28,7 +28,7 @@
     ],
     "win": {
       "target": "portable",
-      "icon": "assets/app-icon.ico"
+      "icon": "app-icon.ico"
     }
   }
 }

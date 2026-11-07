@@ -50,6 +50,7 @@ let appSettings = {
   userName: '',
   requireStart: false,
   groqApiKey: '',
+  braveApiKey: '',
   groqTextModel: '',
   groqVoiceModel: '',
 };
@@ -166,6 +167,9 @@ async function loadSettings() {
     ),
     userName: normalizeUserName(saved.userName),
     requireStart: saved.requireStart === true,
+    braveApiKey: typeof saved.braveApiKey === 'string'
+      ? saved.braveApiKey.trim()
+      : '',
     ...normalizeGroqSettings(saved),
   };
   delete appSettings.groqModel;
@@ -360,11 +364,12 @@ async function askBrain(text, settings, onToolUsage) {
 
 ipcMain.handle('capri:warmup', () => warmUp());
 ipcMain.handle('settings:get', () => {
-  const { groqApiKey, ...settings } = appSettings;
+  const { groqApiKey, braveApiKey, ...settings } = appSettings;
   return {
     ...settings,
     ...brain.getConfiguration(appSettings),
     hasGroqApiKeyOverride: Boolean(groqApiKey),
+    hasBraveApiKey: Boolean(braveApiKey),
   };
 });
 
@@ -385,6 +390,17 @@ ipcMain.handle('settings:set-groq-api-key', async (_event, apiKey) => {
   }
 
   return saveGroqSetting('groqApiKey', apiKey.trim());
+});
+
+ipcMain.handle('settings:set-brave-api-key', async (_event, apiKey) => {
+  if (typeof apiKey !== 'string' || apiKey.length > 512) {
+    throw new Error('Brave API key must be 512 characters or fewer.');
+  }
+
+  const updatedSettings = { ...appSettings, braveApiKey: apiKey.trim() };
+  await writeSettings(updatedSettings);
+  appSettings = updatedSettings;
+  return { hasBraveApiKey: Boolean(appSettings.braveApiKey) };
 });
 
 ipcMain.handle('settings:set-groq-text-model', async (_event, model) => {

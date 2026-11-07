@@ -666,7 +666,7 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
 
 .settings-text-input {
   width: 100%;
-  max-width: 520px;
+  max-width: 580px;
   min-height: 42px;
   padding: 10px 12px;
   border: 1px solid rgba(0, 240, 255, 0.3);
@@ -695,29 +695,33 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
 
 .settings-secret-input {
   position: relative;
-  display: block;
-  width: 100%;
-  max-width: 520px;
-}
-
-.settings-secret-input .settings-text-input {
-  padding-right: 48px;
 }
 
 .settings-secret-toggle {
   position: absolute;
   top: 50%;
-  right: 8px;
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  padding: 5px;
+  right: 40px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
   color: var(--steel);
   background: transparent;
   cursor: pointer;
-  transform: translateY(-50%);
+}
+
+.settings-secret-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .settings-secret-toggle:hover,
@@ -867,14 +871,22 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
   gap: 8px;
 }
 
-.settings-save-row {
+.settings-input-save-row {
   display: flex;
-  justify-content: flex-end;
+  align-items: flex-end;
+  gap: 10px;
   width: 100%;
-  max-width: 520px;
+}
+
+.settings-input-save-row .settings-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 700px;
 }
 
 .settings-save-button {
+  flex: 0 0 auto;
+  margin-left: auto;
   min-height: 30px;
   min-width: 128px;
   padding: 4px 9px;
@@ -1476,75 +1488,50 @@ body[data-view="chat"] .composer-mic:hover:not(:disabled) {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .composer-mic.recording { animation: none; }
-}
-
-button:disabled, input:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-:focus-visible {
-  outline: 2px solid var(--cyan);
-  outline-offset: 2px;
-}
-
-.log::-webkit-scrollbar { width: 6px; }
-
-.log::-webkit-scrollbar-thumb {
-  background: var(--cyan);
-  box-shadow: 0 0 8px var(--cyan);
-}
-
-.log::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); }
-
-@keyframes sweep  { from { top: 0; } to { top: calc(100% - 2px); } }
-@keyframes flash  { from { opacity: 0.85; } to { opacity: 0; } }
-@keyframes pulse  { 50% { opacity: 0.35; } }
-@keyframes blink  { 50% { opacity: 0; } }
-
-@keyframes glitch {
-  0% {
-    transform: translateX(-4px);
-    filter: hue-rotate(40deg);
+@media (max-width: 560px) {
+  .settings-input-save-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 28px 84px;
+    align-items: center;
+    column-gap: 4px;
+    row-gap: 8px;
   }
 
-  50% {
-    transform: translateX(4px);
-    filter: hue-rotate(-40deg);
+  .settings-input-save-row .settings-field,
+  .settings-input-save-row .settings-secret-input {
+    display: contents;
   }
 
-  100% {
+  .settings-input-save-row .settings-field-label {
+    grid-column: 1 / -1;
+  }
+
+  /* Every input (with or without an eye) uses column 1 only,
+     so they all have the same width */
+  .settings-input-save-row .settings-text-input {
+    grid-column: 1;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .settings-input-save-row .settings-secret-toggle {
+    position: static;
     transform: none;
-    filter: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sprite.glitch, .sweep, .dot, .msg.typing::after, body::before,
-  .loader::after, .loader-title::before, .loader-title::after,
-  .loader-line, .loader.ready .loader-start, .ghost {
-    animation: none !important;
-  }
-  
-  body { transition: none; }
-
-  body[data-state="eureka"] .portrait::before { animation: none; opacity: 0; }
-}
-
-@media (max-width: 760px) {
-  .app {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-    overflow-y: auto;
-    height: auto;
-    min-height: 100vh;
+    grid-column: 2;
+    justify-self: start;
+    width: 28px;
+    height: 28px;
+    margin: 0 0 0 -2px;
   }
 
-  .portrait-wrap { max-width: 260px; }
-
-  body { overflow: auto; }
-
-  .panel-frame { min-height: 420px; }
+  .settings-input-save-row .settings-save-button {
+    grid-column: 3;
+    width: 100%;
+    min-width: 0;
+    min-height: 28px;
+    padding: 3px 6px;
+    font-size: 11px;
+    margin: 0;
+  }
 }

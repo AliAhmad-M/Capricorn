@@ -100,7 +100,7 @@
           <div>
             <span class="panel-title">SYSTEM SETTINGS</span>
             <p class="settings-page-description">
-              Configure Capri's startup behavior and how it finds and launches your games.
+              Configure Capri's API, behavior, and tool-related settings.
             </p>
           </div>
           <button id="settings-back" class="dock" type="button">Back to Capricorn</button>
@@ -138,59 +138,81 @@
         </section>
         <section class="settings-user">
           <div class="settings-section-heading">
-            <h2 class="settings-section-title">Groq API</h2>
+            <h2 class="settings-section-title">API Settings</h2>
           </div>
-          <label class="settings-field" for="groq-api-key">
-            <span class="settings-field-label">API key</span>
-            <span class="settings-secret-input">
-              <input id="groq-api-key" class="settings-text-input" type="password"
-                     name="groq-api-key" autocomplete="off">
-              <button id="toggle-groq-api-key" class="settings-secret-toggle" type="button"
-                      aria-label="Show API key" title="Show API key" aria-pressed="false">
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                  <path class="settings-secret-eye-slash" d="m3 3 18 18"/>
-                </svg>
-              </button>
-            </span>
-          </label>
-          <div class="settings-save-row">
+          <div class="settings-input-save-row">
+            <label class="settings-field" for="groq-api-key">
+              <span class="settings-field-label">Groq API key</span>
+              <span class="settings-secret-input">
+                <input id="groq-api-key" class="settings-text-input" type="password"
+                       name="groq-api-key" autocomplete="off" placeholder="Enter key">
+                <button id="toggle-groq-api-key" class="settings-secret-toggle" type="button"
+                        aria-label="Show API key" title="Show API key" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                    <path class="settings-secret-eye-slash" d="m3 3 18 18"/>
+                  </svg>
+                </button>
+              </span>
+            </label>
             <button id="save-groq-api-key" class="settings-add-path settings-save-button"
                     type="button" disabled>
               Save API key
             </button>
           </div>
           <p id="groq-api-key-status" class="settings-status" role="status" aria-live="polite"></p>
-          <label class="settings-field" for="groq-text-model">
-            <span class="settings-field-label">Text model</span>
-            <input id="groq-text-model" class="settings-text-input" type="text"
-                   name="groq-text-model" autocomplete="off" maxlength="200">
-          </label>
-          <div class="settings-save-row">
+          <div class="settings-input-save-row">
+            <label class="settings-field" for="groq-text-model">
+              <span class="settings-field-label">Text model</span>
+              <input id="groq-text-model" class="settings-text-input" type="text"
+                     name="groq-text-model" autocomplete="off" maxlength="200" placeholder="Enter model">
+            </label>
             <button id="save-groq-text-model" class="settings-add-path settings-save-button"
                     type="button" disabled>
               Save model
             </button>
           </div>
           <p id="groq-text-model-status" class="settings-status" role="status" aria-live="polite"></p>
-          <label class="settings-field" for="groq-voice-model">
-            <span class="settings-field-label">Voice model</span>
-            <input id="groq-voice-model" class="settings-text-input" type="text"
-                   name="groq-voice-model" autocomplete="off" maxlength="200">
-          </label>
-          <div class="settings-save-row">
+          <div class="settings-input-save-row">
+            <label class="settings-field" for="groq-voice-model">
+              <span class="settings-field-label">Voice model</span>
+              <input id="groq-voice-model" class="settings-text-input" type="text"
+                     name="groq-voice-model" autocomplete="off" maxlength="200">
+            </label>
             <button id="save-groq-voice-model" class="settings-add-path settings-save-button"
                     type="button" disabled>
               Save model
             </button>
           </div>
           <p id="groq-voice-model-status" class="settings-status" role="status" aria-live="polite"></p>
+          <div class="settings-input-save-row">
+            <label class="settings-field" for="brave-api-key">
+              <span class="settings-field-label">Brave API key <span class="settings-optional">(Optional)</span></span>
+              <span class="settings-secret-input">
+                <input id="brave-api-key" class="settings-text-input" type="password"
+                       name="brave-api-key" autocomplete="off" placeholder="Enter key">
+                <button id="toggle-brave-api-key" class="settings-secret-toggle" type="button"
+                        aria-label="Show API key" title="Show API key" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                    <path class="settings-secret-eye-slash" d="m3 3 18 18"/>
+                  </svg>
+                </button>
+              </span>
+            </label>
+            <button id="save-brave-api-key" class="settings-add-path settings-save-button"
+                    type="button" disabled>
+              Save API key
+            </button>
+          </div>
+          <p id="brave-api-key-status" class="settings-status" role="status" aria-live="polite"></p>
         </section>
         <section class="settings-game-paths">
           <div class="settings-game-paths-header">
             <div class="settings-section-heading">
-              <h2 class="settings-section-title">Game libraries</h2>
+              <h2 class="settings-section-title">Video Games</h2>
               <p class="settings-section-description">
                 Choose where Capri should look for installed games, or add executable files directly.
               </p>
@@ -236,9 +258,9 @@
         <section class="settings-game-paths">
           <div class="settings-game-paths-header">
             <div class="settings-section-heading">
-              <h2 class="settings-section-title">Software folders</h2>
+              <h2 class="settings-section-title">Softwares</h2>
               <p class="settings-section-description">
-                Choose where Capri should look for software, or add executable files directly.
+                Choose where Capri should look for installed software, or add executable files directly.
               </p>
             </div>
 

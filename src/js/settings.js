@@ -9,14 +9,18 @@
   const requireStartStatus = document.querySelector('#require-start-status');
   const groqApiKeyInput = document.querySelector('#groq-api-key');
   const groqApiKeyStatus = document.querySelector('#groq-api-key-status');
+  const groqApiKeySaveButton = document.querySelector('#save-groq-api-key');
+  const groqApiKeyToggle = document.querySelector('#toggle-groq-api-key');
   const groqTextModelInput = document.querySelector('#groq-text-model');
   const groqTextModelStatus = document.querySelector('#groq-text-model-status');
   const groqVoiceModelInput = document.querySelector('#groq-voice-model');
   const groqVoiceModelStatus = document.querySelector('#groq-voice-model-status');
-  const groqApiKeySaveButton = document.querySelector('#save-groq-api-key');
   const groqTextModelSaveButton = document.querySelector('#save-groq-text-model');
   const groqVoiceModelSaveButton = document.querySelector('#save-groq-voice-model');
-  const groqApiKeyToggle = document.querySelector('#toggle-groq-api-key');
+  const braveApiKeyInput = document.querySelector('#brave-api-key');
+  const braveApiKeyStatus = document.querySelector('#brave-api-key-status');
+  const braveApiKeySaveButton = document.querySelector('#save-brave-api-key');
+  const braveApiKeyToggle = document.querySelector('#toggle-brave-api-key');
 
   if (!timeZoneSelect) return;
 
@@ -24,6 +28,21 @@
   const timeZoneLabel = document.querySelector('#timezone-label');
   const timeZoneOptions = document.querySelector('#timezone-options');
   const timeZoneWrap = document.querySelector('.settings-select-wrap');
+  const saveButtonLabels = new WeakMap();
+  const saveButtonTimers = new WeakMap();
+
+  function showSaved(button) {
+    if (!saveButtonLabels.has(button)) {
+      saveButtonLabels.set(button, button.textContent.trim());
+    }
+
+    clearTimeout(saveButtonTimers.get(button));
+    button.textContent = 'Saved';
+    saveButtonTimers.set(button, setTimeout(() => {
+      button.textContent = saveButtonLabels.get(button);
+      saveButtonTimers.delete(button);
+    }, 1000));
+  }
 
   const directorySettings = [
     {
@@ -75,6 +94,9 @@
     groqTextModelSaveButton,
     groqVoiceModelSaveButton,
     groqApiKeyToggle,
+    braveApiKeyInput,
+    braveApiKeySaveButton,
+    braveApiKeyToggle,
   ]) {
     if (element) element.disabled = true;
   }
@@ -83,6 +105,7 @@
   let savedUserName = '';
   let savedRequireStart = false;
   let savedGroqApiKey = '';
+  let hasSavedBraveApiKey = false;
   let savedGroqTextModel = '';
   let savedGroqVoiceModel = '';
 
@@ -477,7 +500,10 @@
     if (!window.capriSettings?.setGroqApiKey) return;
 
     const apiKey = groqApiKeyInput.value.trim();
-    if (apiKey === savedGroqApiKey) return;
+    if (apiKey === savedGroqApiKey) {
+      showSaved(groqApiKeySaveButton);
+      return;
+    }
 
     groqApiKeySaveButton.disabled = true;
     try {
@@ -485,10 +511,38 @@
       savedGroqApiKey = apiKey;
       groqApiKeyInput.value = savedGroqApiKey;
       groqApiKeyStatus.textContent = '';
+      showSaved(groqApiKeySaveButton);
     } catch (error) {
       groqApiKeyStatus.textContent = `Couldn't save API key: ${error.message}`;
     } finally {
       groqApiKeySaveButton.disabled = false;
+    }
+  }
+
+  async function saveBraveApiKey() {
+    if (!window.capriSettings?.setBraveApiKey) {
+      braveApiKeyStatus.textContent = 'Brave API key settings are unavailable.';
+      return;
+    }
+
+    const apiKey = braveApiKeyInput.value.trim();
+    if (!apiKey && !hasSavedBraveApiKey) {
+      showSaved(braveApiKeySaveButton);
+      return;
+    }
+
+    braveApiKeySaveButton.disabled = true;
+    try {
+      const settings = await window.capriSettings.setBraveApiKey(apiKey);
+      hasSavedBraveApiKey = settings.hasBraveApiKey === true;
+      braveApiKeyInput.value = '';
+      braveApiKeyStatus.textContent = '';
+      showSaved(braveApiKeySaveButton);
+    } catch (error) {
+      braveApiKeyStatus.textContent =
+        `Couldn't save Brave API key: ${error.message}`;
+    } finally {
+      braveApiKeySaveButton.disabled = false;
     }
   }
 
@@ -498,6 +552,7 @@
     const model = input.value.trim();
     if (model === getSavedModel()) {
       status.textContent = '';
+      showSaved(button);
       return;
     }
 
@@ -509,6 +564,7 @@
         : 'groqVoiceModel']);
       input.value = getSavedModel();
       status.textContent = '';
+      showSaved(button);
     } catch (error) {
       input.value = getSavedModel();
       status.textContent = `Couldn't save ${label.toLowerCase()}: ${error.message}`;
@@ -587,6 +643,10 @@
     if (groqApiKeySaveButton) groqApiKeySaveButton.disabled = false;
     if (groqApiKeyToggle) groqApiKeyToggle.disabled = false;
     groqApiKeyStatus.textContent = '';
+    hasSavedBraveApiKey = settings.hasBraveApiKey === true;
+    if (braveApiKeyInput) braveApiKeyInput.disabled = false;
+    if (braveApiKeySaveButton) braveApiKeySaveButton.disabled = false;
+    if (braveApiKeyToggle) braveApiKeyToggle.disabled = false;
     savedGroqTextModel = typeof settings.groqTextModel === 'string'
       ? settings.groqTextModel
       : typeof settings.groqModel === 'string'
@@ -678,6 +738,17 @@
       showApiKey ? 'Hide API key' : 'Show API key'
     );
     groqApiKeyToggle.title = showApiKey ? 'Hide API key' : 'Show API key';
+  });
+  braveApiKeySaveButton?.addEventListener('click', saveBraveApiKey);
+  braveApiKeyToggle?.addEventListener('click', () => {
+    const showApiKey = braveApiKeyInput.type === 'password';
+    braveApiKeyInput.type = showApiKey ? 'text' : 'password';
+    braveApiKeyToggle.setAttribute('aria-pressed', String(showApiKey));
+    braveApiKeyToggle.setAttribute(
+      'aria-label',
+      showApiKey ? 'Hide API key' : 'Show API key'
+    );
+    braveApiKeyToggle.title = showApiKey ? 'Hide API key' : 'Show API key';
   });
   userNameInput?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {

@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('capriSettings', {
   get: () => ipcRenderer.invoke('settings:get'),
   setGroqApiKey: (apiKey) =>
     ipcRenderer.invoke('settings:set-groq-api-key', apiKey),
+  setBraveApiKey: (apiKey) =>
+    ipcRenderer.invoke('settings:set-brave-api-key', apiKey),
   setGroqTextModel: (model) =>
     ipcRenderer.invoke('settings:set-groq-text-model', model),
   setGroqVoiceModel: (model) =>

@@ -651,13 +651,13 @@ async function searchBrave(query, apiKey) {
   }));
 }
 
-async function webSearch({ query }) {
+async function webSearch({ query, apiKey: configuredApiKey }) {
   if (typeof query !== 'string' || !query.trim()) {
     throw new Error('A search query is required.');
   }
 
   const q = query.trim().slice(0, 200);
-  const apiKey = process.env.BRAVE_API_KEY;
+  const apiKey = configuredApiKey || process.env.BRAVE_API_KEY;
   const results = apiKey
     ? await searchBrave(q, apiKey)
     : await searchDuckDuckGo(q);
@@ -938,6 +938,13 @@ async function executeToolCall(toolCall, settings = {}) {
       effectiveArgs = {
         ...args,
         timeZone: settings.timeZone || 'Asia/Karachi'
+      };
+    }
+
+    if (name === 'web_search') {
+      effectiveArgs = {
+        ...args,
+        apiKey: settings.braveApiKey || ''
       };
     }
 
