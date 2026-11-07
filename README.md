@@ -3,7 +3,17 @@
 Capricorn is a desktop assistant built with Electron. It uses Groq for its conversational model and can use tools such as web search while responding. 
 It is based on Project Capricorn from the anime Cyberpunk: Edgerunners 2
 
-## Run Capri
+## Run Capri (via Release)
+
+1. Download the latest release from the [Releases](https://github.com/AliAhmad-M/Capricorn/releases) page.
+2. Extract the downloaded archive and run file: `Capricorn.exe`.
+3. Open **Settings** and enter your Groq API key to enable chat.
+
+No Node.js installation or manual dependency setup is required.
+
+---
+
+## Run Capri (via Source Code)
 
 1. Install [Node.js](https://nodejs.org/), which includes npm.
 2. Clone the repository and install its dependencies:
