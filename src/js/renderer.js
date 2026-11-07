@@ -263,7 +263,8 @@ async function handleRequest(rawQuery) {
     const { text = '' } = await ask(query);
     responseText = text;
   } catch (error) {
-    responseText = `That request failed: ${error.message}. Try again.`;
+    console.error('Assistant request failed in the chat window:', error);
+    responseText = "Ugh, something went sideways on my end. Give it another shot, choom.";
   }
 
   setState('eureka');
@@ -399,10 +400,17 @@ async function startRecording() {
     voice.active = false;
     releaseAudio();
     console.error('Failed to access the microphone:', error);
-    elements.input.placeholder = `Microphone unavailable: ${error.message}`;
+    const message = error.name === 'NotAllowedError' || error.name === 'SecurityError'
+      ? 'Allow microphone access to use voice input'
+      : error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError'
+        ? 'No microphone found'
+        : error.name === 'NotReadableError' || error.name === 'TrackStartError'
+          ? 'Microphone is busy or unavailable'
+          : 'Could not start the microphone';
+    elements.input.placeholder = message;
     setTimeout(() => {
       elements.input.placeholder = 'Type a request';
-    }, 4000);
+    }, 3000);
     return;
   }
 
@@ -439,8 +447,7 @@ async function startRecording() {
       console.error('Audio recording failed:', event.error);
       voice.active = false;
       releaseAudio();
-      elements.input.placeholder =
-        `Recording failed: ${event.error?.message || 'Unknown recording error'}`;
+      elements.input.placeholder = 'Recording failed. Try again, choom.';
       setTimeout(() => {
         elements.input.placeholder = 'Type a request';
       }, 4000);
@@ -455,7 +462,7 @@ async function startRecording() {
     voice.active = false;
     releaseAudio();
     console.error('Failed to start audio recording:', error);
-    elements.input.placeholder = `Recording unavailable: ${error.message}`;
+    elements.input.placeholder = 'Could not start recording. Try again, choom.';
     setTimeout(() => {
       elements.input.placeholder = 'Type a request';
     }, 4000);
@@ -502,7 +509,14 @@ async function finishRecording() {
       audio: await blob.arrayBuffer(),
       mimeType: blob.type,
     });
-    if (result.error) throw new Error(result.error);
+    if (result.error) {
+      elements.input.placeholder = result.error;
+      setTimeout(() => {
+        elements.input.placeholder = 'Type a request';
+      }, 4000);
+      setBusy(false);
+      return;
+    }
     const text = result.text.trim();
     elements.input.placeholder = 'Type a request';
     setBusy(false);
@@ -515,7 +529,8 @@ async function finishRecording() {
     }
   } catch (error) {
     console.error('Voice transcription failed:', error);
-    elements.input.placeholder = `Transcription failed: ${error.message}`;
+    elements.input.placeholder =
+      'Transcription failed. Give it another shot, choom.';
     setTimeout(() => {
       elements.input.placeholder = 'Type a request';
     }, 4000);

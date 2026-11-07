@@ -49,6 +49,61 @@ function getVoiceModel(settings = {}) {
   return settings.groqVoiceModel || process.env.GROQ_VOICE_MODEL || DEFAULT_VOICE_MODEL;
 }
 
+function getFriendlyErrorMessage(error) {
+  const message = typeof error === 'string'
+    ? error
+    : error?.message || '';
+  const status = Number(error?.status || error?.statusCode);
+  const errorCode = [
+    error?.code,
+    error?.cause?.code,
+  ].filter(Boolean).join(' ').toLowerCase();
+  const errorName = `${error?.name || ''} ${error?.cause?.name || ''}`.toLowerCase();
+  const details = `${message} ${errorCode} ${errorName}`.toLowerCase();
+
+  if (/set a groq api key|missing groq api key/.test(details)) {
+    return "Uh oh, it looks like you haven't set up your Groq API key yet. Add it in Settings and we'll be back in business.";
+  }
+  if (status === 401 || /authenticationerror|invalid api key|incorrect api key/.test(details)) {
+    return "That Groq API key doesn't seem to be valid. Check it in Settings, choom.";
+  }
+  if (status === 403 || /permissiondeniederror|insufficient permissions/.test(details)) {
+    return "Groq won't let me use that model with this API key. Check your key and model settings.";
+  }
+  if (status === 404 || /notfounderror|model.*not found/.test(details)) {
+    return "I couldn't find that model or page. Check the model name or the address and try again.";
+  }
+  if (status === 429 || /ratelimiterror|rate limit|quota exceeded/.test(details)) {
+    return "Groq's a little swamped or your usage limit kicked in. Give it a moment, then try again.";
+  }
+  if (status >= 500 || /internalservererror|service unavailable/.test(details)) {
+    return "The service is having a rough moment. Give it a bit and try again, choom.";
+  }
+  if (
+    errorName.includes('timeout') ||
+    /timed out|timeout|etimedout/.test(details)
+  ) {
+    return "That took too long and timed out. Check your connection and give it another go.";
+  }
+  if (/enotfound|eai_again|econnreset|econnrefused|networkerror|failed to fetch|fetch failed/.test(details)) {
+    return "I can't reach the service right now. Check your internet connection and try again.";
+  }
+  if (/unsupported voice recording format/.test(details)) {
+    return "This recording format won't play nice with transcription. Try recording again.";
+  }
+  if (/recording is too large/.test(details)) {
+    return "That recording is too large to send. Try a shorter one.";
+  }
+  if (/invalid.*audio|audio.*invalid|no audio/.test(details)) {
+    return "I couldn't make sense of that recording. Try recording it again.";
+  }
+  if (status === 400 || status === 422) {
+    return "Groq couldn't process that request. Check the model settings and try again.";
+  }
+
+  return "Ugh, something went sideways on my end. Give it another shot, choom.";
+}
+
 function getConfiguration(settings = {}) {
   return {
     groqApiKey: settings.groqApiKey || process.env.GROQ_API_KEY || '',
@@ -190,7 +245,12 @@ async function ask(query, conversation = [], settings = {}, onToolUsage = () => 
         onToolUsage({ ...activity, active: false });
       }
 
-      const content = result.ok ? result.result : `Error: ${result.error}`;
+      if (!result.ok) {
+        console.error(`[capri:tool] ${call.function.name} failed:`, result.error);
+      }
+      const content = result.ok
+        ? result.result
+        : getFriendlyErrorMessage(result.error);
 
       messages.push({
         role: 'tool',
@@ -208,4 +268,10 @@ async function ask(query, conversation = [], settings = {}, onToolUsage = () => 
   };
 }
 
-module.exports = { ask, warmup, getConfiguration, transcribe };
+module.exports = {
+  ask,
+  warmup,
+  getConfiguration,
+  getFriendlyErrorMessage,
+  transcribe,
+};

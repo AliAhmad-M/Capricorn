@@ -602,7 +602,8 @@ ipcMain.handle('capri:transcribe', async (_event, audio) => {
       text: await brain.transcribe(buffer, { ...appSettings }, mimeType),
     };
   } catch (error) {
-    return { text: '', error: error.message || String(error) };
+    console.error('Voice transcription failed:', error);
+    return { text: '', error: brain.getFriendlyErrorMessage(error) };
   }
 });
 
@@ -621,7 +622,8 @@ ipcMain.handle('capri:ask', async (event, query) => {
       await askBrain(String(query), { ...appSettings }, onToolUsage)
     ).text ?? '';
   } catch (error) {
-    reply = `That request failed: ${error.message}. Try again.`;
+    console.error('Assistant request failed:', error);
+    reply = brain.getFriendlyErrorMessage(error);
   }
 
   transcript.push({ who: 'capri', text: reply });

@@ -885,11 +885,12 @@ async function checkNetworkConnectivity() {
       interfaces
     }, null, 2);
   } catch (error) {
+    console.error('Network connectivity check failed:', error);
     return JSON.stringify({
       internetConnected: false,
       error: error.name === 'TimeoutError'
         ? 'Timed out while checking internet access.'
-        : error.message,
+        : 'Could not reach the connectivity check service.',
       interfaces
     }, null, 2);
   }
