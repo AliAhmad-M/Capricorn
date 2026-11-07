@@ -1,7 +1,17 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../../.env') });
-const { app, BrowserWindow, ipcMain, dialog, screen, Menu, globalShortcut } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  screen,
+  Menu,
+  globalShortcut,
+  session,
+} = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const brain = require('./brain');
 
 const PORTRAIT_SIZE = { width: 220, height: 220 };
@@ -37,7 +47,8 @@ let appSettings = {
   softwareExecutableNicknames: {},
   userName: '',
   groqApiKey: '',
-  groqModel: '',
+  groqTextModel: '',
+  groqVoiceModel: '',
 };
 
 function normalizeGroqSettings(settings) {
@@ -45,8 +56,13 @@ function normalizeGroqSettings(settings) {
     groqApiKey: typeof settings.groqApiKey === 'string'
       ? settings.groqApiKey.trim()
       : '',
-    groqModel: typeof settings.groqModel === 'string'
-      ? settings.groqModel.trim()
+    groqTextModel: typeof settings.groqTextModel === 'string'
+      ? settings.groqTextModel.trim()
+      : typeof settings.groqModel === 'string'
+        ? settings.groqModel.trim()
+        : '',
+    groqVoiceModel: typeof settings.groqVoiceModel === 'string'
+      ? settings.groqVoiceModel.trim()
       : '',
   };
 }
@@ -133,6 +149,7 @@ async function loadSettings() {
       userName: normalizeUserName(savedSettings.userName),
       ...normalizeGroqSettings(savedSettings),
     };
+    delete appSettings.groqModel;
     await writeSettings(appSettings);
     return;
   }
@@ -159,6 +176,7 @@ async function loadSettings() {
     userName: normalizeUserName(savedSettings.userName),
     ...normalizeGroqSettings(savedSettings),
   };
+  delete appSettings.groqModel;
 }
 
 function createFullWindow() {
@@ -329,20 +347,20 @@ function warmUp() {
 }
 
 // Assistant work stays in the main process
-async function runBrain(text, settings) {
+async function runBrain(text, settings, onToolUsage) {
   // Pass a copy so a failed call can't leave a half-edited history behind
-  const result = await brain.ask(text, [...history], settings);
+  const result = await brain.ask(text, [...history], settings, onToolUsage);
   if (Array.isArray(result.messages)) history = result.messages;
   return result;
 }
 
-async function askBrain(text, settings) {
+async function askBrain(text, settings, onToolUsage) {
   try {
-    return await runBrain(text, settings);
+    return await runBrain(text, settings, onToolUsage);
   } catch (error) {
     if (!/No user query/i.test(error.message)) throw error;
     history = [];
-    return await runBrain(text, settings);
+    return await runBrain(text, settings, onToolUsage);
   }
 }
 
@@ -375,12 +393,20 @@ ipcMain.handle('settings:set-groq-api-key', async (_event, apiKey) => {
   return saveGroqSetting('groqApiKey', apiKey.trim());
 });
 
-ipcMain.handle('settings:set-groq-model', async (_event, model) => {
+ipcMain.handle('settings:set-groq-text-model', async (_event, model) => {
   if (typeof model !== 'string' || model.length > 200) {
     throw new Error('Groq model must be 200 characters or fewer.');
   }
 
-  return saveGroqSetting('groqModel', model.trim());
+  return saveGroqSetting('groqTextModel', model.trim());
+});
+
+ipcMain.handle('settings:set-groq-voice-model', async (_event, model) => {
+  if (typeof model !== 'string' || model.length > 200) {
+    throw new Error('Groq transcription model must be 200 characters or fewer.');
+  }
+
+  return saveGroqSetting('groqVoiceModel', model.trim());
 });
 
 ipcMain.handle('settings:set-time-zone', async (_event, timeZone) => {
@@ -550,6 +576,36 @@ ipcMain.handle('capri-settings:set-software-paths', (_event, paths) =>
   saveDirectoryPaths(paths, 'softwarePaths', 'software')
 );
 
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
+
+ipcMain.handle('capri:transcribe', async (_event, audio) => {
+  try {
+    if (!audio || typeof audio !== 'object') {
+      throw new Error('Invalid audio recording.');
+    }
+
+    const { audio: data, mimeType } = audio;
+    if (
+      !(data instanceof ArrayBuffer) &&
+      !ArrayBuffer.isView(data)
+    ) {
+      throw new Error('Invalid audio recording data.');
+    }
+    if (typeof mimeType !== 'string') {
+      throw new Error('Invalid audio recording format.');
+    }
+
+    const buffer = Buffer.from(data);
+    if (buffer.length === 0) return { text: '' };
+    if (buffer.length > MAX_AUDIO_BYTES) throw new Error('Recording is too large.');
+    return {
+      text: await brain.transcribe(buffer, { ...appSettings }, mimeType),
+    };
+  } catch (error) {
+    return { text: '', error: error.message || String(error) };
+  }
+});
+
 ipcMain.handle('capri:ask', async (event, query) => {
   // Wait for warmup
   await warmUp();
@@ -559,7 +615,11 @@ ipcMain.handle('capri:ask', async (event, query) => {
 
   let reply;
   try {
-    reply = (await askBrain(String(query), { ...appSettings })).text ?? '';
+    const onToolUsage = (toolUsage) =>
+      broadcast('capri:tool-usage', toolUsage);
+    reply = (
+      await askBrain(String(query), { ...appSettings }, onToolUsage)
+    ).text ?? '';
   } catch (error) {
     reply = `That request failed: ${error.message}. Try again.`;
   }
@@ -628,6 +688,18 @@ ipcMain.on('win:menu', () => {
 });
 
 app.whenReady().then(async () => {
+  const appPageUrl = pathToFileURL(page).href;
+  session.defaultSession.setPermissionRequestHandler(
+    (webContents, permission, callback, details) => {
+      const isAppPage = webContents.getURL().split('?')[0] === appPageUrl;
+      const requestsAudio =
+        permission === 'media' &&
+        details.mediaTypes?.includes('audio') &&
+        !details.mediaTypes.includes('video');
+      callback(isAppPage && requestsAudio);
+    }
+  );
+
   try {
     await loadSettings();
   } catch (error) {

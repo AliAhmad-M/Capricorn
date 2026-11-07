@@ -73,12 +73,14 @@
           </div>
           <form id="form" class="composer" autocomplete="off">
             <input id="input" type="text" placeholder="Type a request" aria-label="Request">
+            <canvas id="voice-meter" class="voice-meter" hidden aria-hidden="true"></canvas>
             <button class="send" type="submit" aria-label="Send request" title="Send">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M2 21 23 12 2 3v7l15 2-15 2z"/>
               </svg>
             </button>
-            <button class="composer-mic" type="button" aria-label="Voice input" title="Voice input">
+            <button class="composer-mic" type="button" aria-label="Start voice recording"
+                    aria-pressed="false" title="Start voice recording">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <rect x="9" y="3" width="6" height="12" rx="3"/>
                 <path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"/>
@@ -142,18 +144,30 @@
             </button>
           </div>
           <p id="groq-api-key-status" class="settings-status" role="status" aria-live="polite"></p>
-          <label class="settings-field" for="groq-model">
-            <span class="settings-field-label">Model</span>
-            <input id="groq-model" class="settings-text-input" type="text"
-                   name="groq-model" autocomplete="off" maxlength="200">
+          <label class="settings-field" for="groq-text-model">
+            <span class="settings-field-label">Text model</span>
+            <input id="groq-text-model" class="settings-text-input" type="text"
+                   name="groq-text-model" autocomplete="off" maxlength="200">
           </label>
           <div class="settings-save-row">
-            <button id="save-groq-model" class="settings-add-path settings-save-button"
+            <button id="save-groq-text-model" class="settings-add-path settings-save-button"
                     type="button" disabled>
               Save model
             </button>
           </div>
-          <p id="groq-model-status" class="settings-status" role="status" aria-live="polite"></p>
+          <p id="groq-text-model-status" class="settings-status" role="status" aria-live="polite"></p>
+          <label class="settings-field" for="groq-voice-model">
+            <span class="settings-field-label">Voice model</span>
+            <input id="groq-voice-model" class="settings-text-input" type="text"
+                   name="groq-voice-model" autocomplete="off" maxlength="200">
+          </label>
+          <div class="settings-save-row">
+            <button id="save-groq-voice-model" class="settings-add-path settings-save-button"
+                    type="button" disabled>
+              Save model
+            </button>
+          </div>
+          <p id="groq-voice-model-status" class="settings-status" role="status" aria-live="polite"></p>
         </section>
         <section class="settings-game-paths">
           <div class="settings-game-paths-header">

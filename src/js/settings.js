@@ -7,10 +7,13 @@
   const userNameStatus = document.querySelector('#user-name-status');
   const groqApiKeyInput = document.querySelector('#groq-api-key');
   const groqApiKeyStatus = document.querySelector('#groq-api-key-status');
-  const groqModelInput = document.querySelector('#groq-model');
-  const groqModelStatus = document.querySelector('#groq-model-status');
+  const groqTextModelInput = document.querySelector('#groq-text-model');
+  const groqTextModelStatus = document.querySelector('#groq-text-model-status');
+  const groqVoiceModelInput = document.querySelector('#groq-voice-model');
+  const groqVoiceModelStatus = document.querySelector('#groq-voice-model-status');
   const groqApiKeySaveButton = document.querySelector('#save-groq-api-key');
-  const groqModelSaveButton = document.querySelector('#save-groq-model');
+  const groqTextModelSaveButton = document.querySelector('#save-groq-text-model');
+  const groqVoiceModelSaveButton = document.querySelector('#save-groq-voice-model');
   const groqApiKeyToggle = document.querySelector('#toggle-groq-api-key');
 
   if (!timeZoneSelect) return;
@@ -63,9 +66,11 @@
   if (userNameInput) userNameInput.disabled = true;
   for (const element of [
     groqApiKeyInput,
-    groqModelInput,
+    groqTextModelInput,
+    groqVoiceModelInput,
     groqApiKeySaveButton,
-    groqModelSaveButton,
+    groqTextModelSaveButton,
+    groqVoiceModelSaveButton,
     groqApiKeyToggle,
   ]) {
     if (element) element.disabled = true;
@@ -74,7 +79,8 @@
   let savedTimeZone = null;
   let savedUserName = '';
   let savedGroqApiKey = '';
-  let savedGroqModel = '';
+  let savedGroqTextModel = '';
+  let savedGroqVoiceModel = '';
 
   // Get the current UTC offset for a timezone.
   function getOffsetMinutes(timeZone) {
@@ -463,29 +469,31 @@
     }
   }
 
-  async function saveGroqModel() {
-    if (!window.capriSettings?.setGroqModel) return;
+  async function saveGroqModel(input, status, button, settingMethod, getSavedModel, setSavedModel, label) {
+    if (!window.capriSettings?.[settingMethod]) return;
 
-    const model = groqModelInput.value.trim();
-    if (model === savedGroqModel) {
-      groqModelStatus.textContent = 'No model changes to save.';
+    const model = input.value.trim();
+    if (model === getSavedModel()) {
+      status.textContent = `No ${label} changes to save.`;
       return;
     }
 
-    groqModelSaveButton.disabled = true;
-    groqModelStatus.textContent = 'Saving...';
+    button.disabled = true;
+    status.textContent = 'Saving...';
     try {
-      const settings = await window.capriSettings.setGroqModel(model);
-      savedGroqModel = settings.groqModel;
-      groqModelInput.value = savedGroqModel;
-      groqModelStatus.textContent = savedGroqModel
-        ? 'Model saved.'
-        : 'Model saved; using the .env value or default.';
+      const settings = await window.capriSettings[settingMethod](model);
+      setSavedModel(settings[settingMethod === 'setGroqTextModel'
+        ? 'groqTextModel'
+        : 'groqVoiceModel']);
+      input.value = getSavedModel();
+      status.textContent = getSavedModel()
+        ? `${label} saved.`
+        : `${label} saved; using the .env value or default.`;
     } catch (error) {
-      groqModelInput.value = savedGroqModel;
-      groqModelStatus.textContent = `Couldn't save model: ${error.message}`;
+      input.value = getSavedModel();
+      status.textContent = `Couldn't save ${label.toLowerCase()}: ${error.message}`;
     } finally {
-      groqModelSaveButton.disabled = false;
+      button.disabled = false;
     }
   }
 
@@ -553,14 +561,24 @@
     } else {
       groqApiKeyStatus.textContent = 'Using the API key from .env, if configured.';
     }
-    savedGroqModel = typeof settings.groqModel === 'string'
-      ? settings.groqModel
-      : '';
-    if (groqModelInput) {
-      groqModelInput.value = savedGroqModel;
-      groqModelInput.disabled = false;
+    savedGroqTextModel = typeof settings.groqTextModel === 'string'
+      ? settings.groqTextModel
+      : typeof settings.groqModel === 'string'
+        ? settings.groqModel
+        : '';
+    if (groqTextModelInput) {
+      groqTextModelInput.value = savedGroqTextModel;
+      groqTextModelInput.disabled = false;
     }
-    if (groqModelSaveButton) groqModelSaveButton.disabled = false;
+    if (groqTextModelSaveButton) groqTextModelSaveButton.disabled = false;
+    savedGroqVoiceModel = typeof settings.groqVoiceModel === 'string'
+      ? settings.groqVoiceModel
+      : '';
+    if (groqVoiceModelInput) {
+      groqVoiceModelInput.value = savedGroqVoiceModel;
+      groqVoiceModelInput.disabled = false;
+    }
+    if (groqVoiceModelSaveButton) groqVoiceModelSaveButton.disabled = false;
 
     try {
       const timeZone = settings.timeZone || 'Asia/Karachi';
@@ -602,7 +620,28 @@
   // Timezone dropdown interactions.
   userNameInput?.addEventListener('change', saveUserName);
   groqApiKeySaveButton?.addEventListener('click', () => saveGroqApiKey());
-  groqModelSaveButton?.addEventListener('click', () => saveGroqModel());
+  groqTextModelSaveButton?.addEventListener('click', () =>
+    saveGroqModel(
+      groqTextModelInput,
+      groqTextModelStatus,
+      groqTextModelSaveButton,
+      'setGroqTextModel',
+      () => savedGroqTextModel,
+      (model) => { savedGroqTextModel = model; },
+      'Text model'
+    )
+  );
+  groqVoiceModelSaveButton?.addEventListener('click', () =>
+    saveGroqModel(
+      groqVoiceModelInput,
+      groqVoiceModelStatus,
+      groqVoiceModelSaveButton,
+      'setGroqVoiceModel',
+      () => savedGroqVoiceModel,
+      (model) => { savedGroqVoiceModel = model; },
+      'Transcription model'
+    )
+  );
   groqApiKeyToggle?.addEventListener('click', () => {
     const showApiKey = groqApiKeyInput.type === 'password';
     groqApiKeyInput.type = showApiKey ? 'text' : 'password';

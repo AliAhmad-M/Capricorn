@@ -1,17 +1,27 @@
 {
   "name": "capricorn",
-  "version": "0.1.0",
-  "description": "A desktop computer assistant",
+  "version": "1.0.0",
+  "author": "Ali Ahmad",
+  "description": "A desktop assistant.",
   "main": "src/js/main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder"
   },
   "devDependencies": {
-    "electron": "^33.2.0"
+    "electron": "^33.2.0",
+    "electron-builder": "^26.18.0"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
     "dotenv": "^18.0.9",
     "groq-sdk": "^1.6.0"
+  },
+  "build": {
+    "appId": "com.ali.capricorn",
+    "productName": "Capricorn",
+    "win": {
+      "target": "portable"
+    }
   }
 }

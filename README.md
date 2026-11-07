@@ -14,15 +14,20 @@ It is based on Project Capricorn from the anime Cyberpunk: Edgerunners 2
    npm install
    ```
 
-3. Create a `.env` file in the project root and add your Groq API key and model:
+3. Create a `.env` file in the project root and configure Groq:
 
    ```env
    GROQ_API_KEY=your_groq_api_key
-   GROQ_MODEL=your_model
+   GROQ_TEXT_MODEL=openai/gpt-oss-20b
+   GROQ_VOICE_MODEL=whisper-large-v3-turbo
    ```
 
-   Get an API key from [Groq](https://console.groq.com/keys). `GROQ_MODEL` is
-   optional; if omitted, Capri uses `llama-3.3-70b-versatile`.
+   Get an API key from [Groq](https://console.groq.com/keys). The same
+   `GROQ_API_KEY` is used for chat and voice transcription. Both model variables
+   are optional; the defaults are `qwen/qwen3.8-27b` for chat and
+   `whisper-large-v3-turbo` for transcription. You can also change the key and
+   either model in Settings; saved values override `.env`. Clear a setting and
+   save it to use its `.env` value or the default again.
 
 4. Start the app:
 
@@ -32,3 +37,6 @@ It is based on Project Capricorn from the anime Cyberpunk: Edgerunners 2
 
 Web search uses DuckDuckGo by default. To use Brave Search instead, add a
 `BRAVE_API_KEY` to `.env`. Keep API keys private; `.env` is excluded from Git.
+
+To use voice input, click the microphone once to start recording and click it
+again to transcribe and send the recording. A Groq API key is required.

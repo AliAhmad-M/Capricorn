@@ -37,6 +37,7 @@ const elements = {
   log: document.querySelector('#log'),
   form: document.querySelector('#form'),
   input: document.querySelector('#input'),
+  meter: document.querySelector('#voice-meter'),
   sendBtn: document.querySelector('#form .send'),
   micBtn: document.querySelector('#form .composer-mic'),
   dock: document.querySelector('#dock'),
@@ -56,6 +57,7 @@ const appState = {
   busy: false,
   localRun: false,
 };
+const toolUsageMessages = new Map();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const spritePath = (key) => `${CONFIG.ASSET_DIR}/${CONFIG.FILES[key]}.jpg`;
@@ -206,6 +208,17 @@ function addMessage(who, text = '') {
   return message;
 }
 
+function updateToolUsage({ id, label, active }) {
+  const existingMessage = toolUsageMessages.get(id);
+  existingMessage?.remove();
+  toolUsageMessages.delete(id);
+
+  if (!active) return;
+
+  const message = addMessage('tool-usage', `- ${label}`);
+  toolUsageMessages.set(id, message);
+}
+
 async function typeOut(element, text) {
   element.classList.add('typing');
 
@@ -262,6 +275,263 @@ async function handleRequest(rawQuery) {
   setState('idle');
   appState.localRun = false;
   setBusy(false);
+}
+
+// Click once to record and again to transcribe and send.
+const VOICE = {
+  MAX_MS: 60000,
+  BARS: 48,
+  BAR_INTERVAL_MS: 40,
+};
+
+const voice = {
+  active: false,
+  stopRequested: false,
+  recorder: null,
+  stream: null,
+  audioCtx: null,
+  analyser: null,
+  raf: 0,
+  maxTimer: 0,
+  chunks: [],
+  levels: [],
+  recordingError: false,
+  lastBar: 0,
+};
+
+function drawMeter(now) {
+  const { meter } = elements;
+  if (!voice.analyser) return;
+  const ctx = meter.getContext('2d');
+  const data = new Uint8Array(voice.analyser.fftSize);
+  voice.analyser.getByteTimeDomainData(data);
+
+  // RMS of the current frame
+  let sum = 0;
+  for (const v of data) {
+    const n = (v - 128) / 128;
+    sum += n * n;
+  }
+  const level = Math.min(1, Math.sqrt(sum / data.length) * 10);
+
+  if (now - voice.lastBar >= VOICE.BAR_INTERVAL_MS) {
+    voice.lastBar = now;
+    voice.levels.push(level);
+    if (voice.levels.length > VOICE.BARS) voice.levels.shift();
+  }
+
+  const dpr = window.devicePixelRatio || 1;
+  const w = meter.width / dpr;
+  const h = meter.height / dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = getComputedStyle(meter).color;
+
+  const slot = w / VOICE.BARS;
+  const barWidth = Math.max(2, slot * 0.6);
+  voice.levels.forEach((l, i) => {
+    const barHeight = Math.max(2, l * h);
+    ctx.fillRect(i * slot, (h - barHeight) / 2, barWidth, barHeight);
+  });
+
+  voice.raf = requestAnimationFrame(drawMeter);
+}
+
+function showMeter(show) {
+  const { meter, input } = elements;
+  if (show) {
+    // Match the input's size before hiding it
+    const rect = input.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    meter.style.width = `${rect.width}px`;
+    meter.style.height = `${rect.height}px`;
+    meter.width = Math.round(rect.width * dpr);
+    meter.height = Math.round(rect.height * dpr);
+  }
+  input.hidden = show;
+  meter.hidden = !show;
+  setMicActive(show);
+}
+
+function setMicActive(active) {
+  elements.micBtn.classList.toggle('recording', active);
+  elements.micBtn.setAttribute('aria-pressed', String(active));
+  elements.micBtn.title = active
+    ? 'Stop recording and send'
+    : 'Start voice recording';
+  elements.micBtn.setAttribute(
+    'aria-label',
+    active ? 'Stop recording and send' : 'Start voice recording'
+  );
+}
+
+function releaseAudio() {
+  cancelAnimationFrame(voice.raf);
+  clearTimeout(voice.maxTimer);
+  voice.stream?.getTracks().forEach((track) => track.stop());
+  voice.audioCtx?.close().catch(() => {});
+  voice.stream = voice.audioCtx = voice.analyser = voice.recorder = null;
+  showMeter(false);
+}
+
+function getRecorderOptions() {
+  const mimeType = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/mp4',
+  ].find((type) => MediaRecorder.isTypeSupported(type));
+
+  return mimeType ? { mimeType } : undefined;
+}
+
+async function startRecording() {
+  if (voice.active || appState.busy) return;
+  voice.active = true;
+  voice.stopRequested = false;
+  setMicActive(true);
+
+  try {
+    voice.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+    });
+  } catch (error) {
+    voice.active = false;
+    releaseAudio();
+    console.error('Failed to access the microphone:', error);
+    elements.input.placeholder = `Microphone unavailable: ${error.message}`;
+    setTimeout(() => {
+      elements.input.placeholder = 'Type a request';
+    }, 4000);
+    return;
+  }
+
+  if (voice.stopRequested) {
+    voice.active = false;
+    releaseAudio();
+    return;
+  }
+
+  voice.chunks = [];
+  voice.levels = [];
+  voice.recordingError = false;
+
+  try {
+    try {
+      voice.audioCtx = new AudioContext();
+      voice.analyser = voice.audioCtx.createAnalyser();
+      voice.analyser.fftSize = 512;
+      voice.audioCtx.createMediaStreamSource(voice.stream).connect(voice.analyser);
+    } catch (error) {
+      console.warn('Audio meter unavailable; recording will continue:', error);
+      voice.audioCtx?.close().catch((closeError) =>
+        console.warn('Failed to close the audio meter:', closeError)
+      );
+      voice.audioCtx = voice.analyser = null;
+    }
+
+    voice.recorder = new MediaRecorder(voice.stream, getRecorderOptions());
+    voice.recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) voice.chunks.push(event.data);
+    };
+    voice.recorder.onerror = (event) => {
+      voice.recordingError = true;
+      console.error('Audio recording failed:', event.error);
+      voice.active = false;
+      releaseAudio();
+      elements.input.placeholder =
+        `Recording failed: ${event.error?.message || 'Unknown recording error'}`;
+      setTimeout(() => {
+        elements.input.placeholder = 'Type a request';
+      }, 4000);
+    };
+    voice.recorder.onstop = finishRecording;
+    voice.recorder.start(250);
+
+    showMeter(true);
+    if (voice.analyser) voice.raf = requestAnimationFrame(drawMeter);
+    voice.maxTimer = setTimeout(stopRecording, VOICE.MAX_MS);
+  } catch (error) {
+    voice.active = false;
+    releaseAudio();
+    console.error('Failed to start audio recording:', error);
+    elements.input.placeholder = `Recording unavailable: ${error.message}`;
+    setTimeout(() => {
+      elements.input.placeholder = 'Type a request';
+    }, 4000);
+  }
+}
+
+function stopRecording() {
+  if (!voice.active) return;
+  if (!voice.recorder) {
+    voice.stopRequested = true;
+    return;
+  }
+  if (voice.recorder.state !== 'recording') return;
+  voice.recorder.stop();
+}
+
+async function finishRecording() {
+  if (voice.recordingError) {
+    voice.recordingError = false;
+    releaseAudio();
+    voice.active = false;
+    return;
+  }
+
+  const blob = new Blob(voice.chunks, {
+    type: voice.recorder?.mimeType || voice.chunks[0]?.type || 'audio/webm',
+  });
+  releaseAudio();
+  voice.active = false;
+
+  if (blob.size === 0) {
+    elements.input.placeholder = 'No audio was recorded';
+    setTimeout(() => {
+      elements.input.placeholder = 'Type a request';
+    }, 2000);
+    return;
+  }
+
+  setBusy(true);
+  elements.input.placeholder = 'Transcribing...';
+
+  try {
+    const result = await window.capri.transcribe({
+      audio: await blob.arrayBuffer(),
+      mimeType: blob.type,
+    });
+    if (result.error) throw new Error(result.error);
+    const text = result.text.trim();
+    elements.input.placeholder = 'Type a request';
+    setBusy(false);
+    if (text) handleRequest(text);
+    else {
+      elements.input.placeholder = 'No speech detected';
+      setTimeout(() => {
+        elements.input.placeholder = 'Type a request';
+      }, 2500);
+    }
+  } catch (error) {
+    console.error('Voice transcription failed:', error);
+    elements.input.placeholder = `Transcription failed: ${error.message}`;
+    setTimeout(() => {
+      elements.input.placeholder = 'Type a request';
+    }, 4000);
+    setBusy(false);
+  }
+}
+
+function initVoiceInput() {
+  const mic = elements.micBtn;
+
+  mic.addEventListener('click', () => {
+    if (mic.disabled) return;
+    if (voice.active) stopRecording();
+    else startRecording();
+  });
+  mic.addEventListener('contextmenu', (event) => event.preventDefault());
 }
 
 function bindEvents() {
@@ -352,6 +622,7 @@ function initViewSwitching() {
 
   winApi?.onSettingsOpen(showSettingsPage);
   winApi?.onSettingsClose(hideSettingsPage);
+  winApi?.onToolUsage(updateToolUsage);
 
   // Copy state from another window
   winApi?.onState((state) => {
@@ -365,6 +636,9 @@ function initViewSwitching() {
     if (appState.localRun || !items.length) return;
     elements.log.replaceChildren();
     items.forEach(({ who, text }) => addMessage(who, text));
+    for (const message of toolUsageMessages.values()) {
+      elements.log.appendChild(message);
+    }
   });
 }
 
@@ -386,6 +660,7 @@ if (VIEW === 'chat') initChatWindow();
 
 showSprite('idle');
 bindEvents();
+initVoiceInput();
 runLoadingScreen().then(() => {
   elements.input.focus();
   blinkLoop();

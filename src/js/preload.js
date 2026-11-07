@@ -1,7 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('capri', {
-  ask: (query, conversation) => ipcRenderer.invoke('capri:ask', query, conversation)
+  warmup: () => ipcRenderer.invoke('capri:warmup'),
+  ask: (query, conversation) => ipcRenderer.invoke('capri:ask', query, conversation),
+  transcribe: (audio) => ipcRenderer.invoke('capri:transcribe', audio)
 });
 
 contextBridge.exposeInMainWorld('capriWindow', {
@@ -19,6 +21,8 @@ contextBridge.exposeInMainWorld('capriWindow', {
     ipcRenderer.on('capri:state', (_event, state) => callback(state)),
   onSync: (callback) =>
     ipcRenderer.on('capri:sync', (_event, transcript) => callback(transcript)),
+  onToolUsage: (callback) =>
+    ipcRenderer.on('capri:tool-usage', (_event, toolUsage) => callback(toolUsage)),
   onFocus: (callback) =>
     ipcRenderer.on('capri:focus', () => callback()),
   onSettingsOpen: (callback) =>
@@ -31,8 +35,10 @@ contextBridge.exposeInMainWorld('capriSettings', {
   get: () => ipcRenderer.invoke('settings:get'),
   setGroqApiKey: (apiKey) =>
     ipcRenderer.invoke('settings:set-groq-api-key', apiKey),
-  setGroqModel: (model) =>
-    ipcRenderer.invoke('settings:set-groq-model', model),
+  setGroqTextModel: (model) =>
+    ipcRenderer.invoke('settings:set-groq-text-model', model),
+  setGroqVoiceModel: (model) =>
+    ipcRenderer.invoke('settings:set-groq-voice-model', model),
   setTimeZone: (timeZone) => ipcRenderer.invoke('settings:set-time-zone', timeZone),
   setUserName: (userName) =>
     ipcRenderer.invoke('settings:set-user-name', userName),
