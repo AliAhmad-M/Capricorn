@@ -2,7 +2,7 @@ const Groq = require('groq-sdk');
 const { toolDefinitions, executeToolCall } = require('./tools');
 const { CAPRI_SYSTEM_PROMPT } = require('./prompt');
 
-const DEFAULT_TEXT_MODELS = ['qwen/qwen3.8-27b'];
+const DEFAULT_TEXT_MODELS = ['qwen/qwen3.8-27b', ];
 const DEFAULT_VOICE_MODELS = ['whisper-large-v3-turbo'];
 const MAX_TOOL_ROUNDS = 8;
 const MAX_TOOL_RETRIES = 3;
@@ -312,16 +312,16 @@ async function createCompletion(settings, messages) {
 
 // Verify Groq before the UI finishes loading
 async function warmup(settings = {}) {
-  // const model = getModel(settings);
+  const model = getModel(settings);
 
-  // await getClient(settings).chat.completions.create({
-  //   model,
-  //   messages: [
-  //     { role: 'system', content: buildSystemPrompt(settings) },
-  //     { role: 'user', content: 'ping' },
-  //   ],
-  //   max_tokens: 1,
-  // });
+  await getClient(settings).chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: buildSystemPrompt(settings) },
+      { role: 'user', content: 'ping' },
+    ],
+    max_tokens: 1,
+  });
 }
 
 async function transcribe(audio, settings = {}, mimeType = 'audio/webm') {

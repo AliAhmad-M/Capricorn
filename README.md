@@ -1,6 +1,7 @@
 # Capricorn
 
-Capricorn is a desktop assistant built with Electron. It uses Groq for its conversational model and can use tools such as web search while responding. 
+Capricorn is a desktop assistant built with Electron. It uses Groq for its 
+conversational model and can use tools such as web search while responding. 
 It is based on Project Capricorn from the anime Cyberpunk: Edgerunners 2
 
 ## Run Capri (via Release)
@@ -36,8 +37,9 @@ No Node.js installation or manual dependency setup is required.
    `GROQ_API_KEY` is used for chat and voice transcription. Both model variables
    are optional; the defaults are `qwen/qwen3.8-27b` for chat and
    `whisper-large-v3-turbo` for transcription. You can also change the key and
-   either model in Settings; saved values override `.env`. Clear a setting and
-   save it to use its `.env` value or the default again.
+   either model in Settings; saved values override `.env`. Capricorn also has the
+   option to add multiple text and voice models (up to 3) for fallback in case one
+   fails. Clear a setting and save it to use its default value again.
 
 4. Start the app:
 
