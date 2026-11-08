@@ -4,6 +4,7 @@ const CONFIG = {
     idle: 'idle',
     blink: 'idle_blink',
     think: 'think',
+    drag: 'drag',
     eureka: 'eureka',
     respond: 'respond',
   },
@@ -45,6 +46,43 @@ const elements = {
   settingsBack: document.querySelector('#settings-back'),
   chips: [...document.querySelectorAll('.chip')],
 };
+
+const dragSpeech = document.getElementById('drag-speech');
+const dragSpeechText = document.getElementById('drag-speech-text');
+
+const DRAG_SPEECH_LINES = [
+  'Hey, put me down!',
+  'Where are you taking me?',
+  'I can walk, you know.',
+  'At least buy me dinner first.',
+  'Weeeee! This is fun!',
+  'Unhand me, you gonk!',
+  'Take me to the top of the screen!',
+  'Fine, I wanted to move anyway.',
+];
+
+let lastDragSpeechIndex = -1;
+
+function showDragSpeech() {
+  if (appState.current !== 'idle') return;
+  
+  let index;
+
+  do {
+    index = Math.floor(Math.random() * DRAG_SPEECH_LINES.length);
+  } while (
+    index === lastDragSpeechIndex &&
+    DRAG_SPEECH_LINES.length > 1
+  );
+
+  lastDragSpeechIndex = index;
+  dragSpeechText.textContent = DRAG_SPEECH_LINES[index];
+  dragSpeech.hidden = false;
+}
+
+function hideDragSpeech() {
+  dragSpeech.hidden = true;
+}
 
 // Which window this page is running in
 const VIEW = new URLSearchParams(location.search).get('view') || 'full';
@@ -115,7 +153,7 @@ async function runLoadingScreen() {
     (settings) => ({ ok: true, settings }),
     (error) => ({ ok: false, error })
   );
-  const tasks = [
+  const assetTasks = [
     ...Object.keys(CONFIG.FILES).map((key) => ({
       label: `sprite/${CONFIG.FILES[key]}`,
       run: loadSprite(key),
@@ -127,30 +165,36 @@ async function runLoadingScreen() {
         sleep(CONFIG.FONT_TIMEOUT_MS).then(() => false),
       ]),
     },
-    {
-      // Load the model and system prompt through main
-      label: 'model/system-prompt',
-      run: Promise.race([
-        window.capri?.warmup
-          ? window.capri.warmup().catch(() => false)
-          : Promise.resolve(true),
-        sleep(CONFIG.WARMUP_TIMEOUT_MS).then(() => false),
-      ]),
-    },
   ];
 
   logLine('> boot sequence start');
 
   let finished = 0;
-  const tracked = tasks.map(async ({ label, run }, index) => {
+
+  const tracked = assetTasks.map(async ({ label, run }, index) => {
     const ok = await run;
     await sleep(CONFIG.STEP_MS * (index + 1));
+
     finished += 1;
-    setLoaderProgress(finished, tasks.length);
+    setLoaderProgress(finished, assetTasks.length);
     logLine(`> ${label} ... ${ok ? 'OK' : 'FAILED'}`, !ok);
   });
 
   await Promise.all([...tracked, sleep(CONFIG.LOAD_MIN_MS)]);
+
+  logLine('> assets loaded');
+
+  // Model warmup starts only after assets finish loading.
+  elements.loaderLabel.textContent = 'Initializing model';
+
+  const warmupOk = await Promise.race([
+    window.capri?.warmup
+      ? window.capri.warmup().catch(() => false)
+      : Promise.resolve(true),
+    sleep(CONFIG.WARMUP_TIMEOUT_MS).then(() => false),
+  ]);
+
+  logLine(`> model/system-prompt ... ${warmupOk ? 'OK' : 'FAILED'}`, !warmupOk);
 
   logLine('> loading complete');
   elements.loaderLabel.textContent = 'Ready';
@@ -182,12 +226,18 @@ async function runLoadingScreen() {
   elements.loader.remove();
 }
 
+let isDraggingPortrait = false;
+
 function setState(nextState, broadcast = true) {
   appState.current = nextState;
   elements.dock.disabled = nextState !== 'idle';
   elements.settings.disabled = nextState !== 'idle';
   document.body.dataset.state = nextState;
-  showSprite(nextState);
+
+  if (!isDraggingPortrait) {
+    showSprite(nextState);
+  }
+
   elements.statusLabel.textContent = CONFIG.LABELS[nextState];
 
   elements.sprite.classList.remove('glitch');
@@ -196,19 +246,21 @@ function setState(nextState, broadcast = true) {
   void elements.sprite.offsetWidth;
   elements.sprite.classList.add('glitch');
 
-  // Broadcast sprite across windows
+  // Broadcast sprite state across windows
   if (broadcast) winApi?.sendState(nextState);
 }
 
 function blinkLoop() {
   setTimeout(async () => {
-    if (appState.current === 'idle') {
+    if (appState.current === 'idle' && !isDraggingPortrait) {
       showSprite('blink');
       await sleep(250);
-      if (appState.current === 'idle') {
+      
+      if (appState.current === 'idle' && !isDraggingPortrait) {
         showSprite('idle');
       }
     }
+    
     blinkLoop();
   }, 2500 + Math.random() * 3000);
 }
@@ -579,12 +631,29 @@ function bindEvents() {
 const DRAG_THRESHOLD_PX = 4;
 const CLICK_DELAY_MS = 220;
 
+const waitFrames = (count) =>
+  new Promise((resolve) => {
+    const tick = () => (--count <= 0 ? resolve() : requestAnimationFrame(tick));
+    requestAnimationFrame(tick);
+  });
+
 function initPortraitMode() {
   const target = document.querySelector('.portrait-wrap');
   let start = null;
   let dragging = false;
   let clickTimer = null;
 
+  function updateDragSprite() {
+    if (VIEW !== 'portrait' || appState.current !== 'idle') return;
+
+    if (isDraggingPortrait) {
+      showSprite('drag');
+    } else if (appState.current === 'think') {
+      showSprite('think');
+    } else {
+      showSprite(appState.current);
+    }
+  }
   // Stop the browser from starting its own image drag
   target.addEventListener('dragstart', (event) => event.preventDefault());
 
@@ -598,19 +667,39 @@ function initPortraitMode() {
 
   target.addEventListener('pointermove', (event) => {
     if (!start) return;
-    const moved = Math.hypot(event.screenX - start.x, event.screenY - start.y);
-    if (!dragging && moved < DRAG_THRESHOLD_PX) return;
-    dragging = true;
-    winApi?.dragMove();
+
+    const dx = event.screenX - start.x;
+    const dy = event.screenY - start.y;
+
+    if (!dragging && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
+      dragging = true;
+      isDraggingPortrait = true;
+
+      showDragSpeech();
+      updateDragSprite();
+    }
+
+    if (dragging) {
+      winApi?.dragMove();
+    }
   });
 
   function finishPress(isClickAllowed) {
     if (!start) return;
+
     const wasDrag = dragging;
+
     start = null;
     dragging = false;
+    isDraggingPortrait = false;
+
+    hideDragSpeech();
     winApi?.dragEnd();
+
+    updateDragSprite();
+
     if (wasDrag || !isClickAllowed) return;
+
     // Wait for double click
     clearTimeout(clickTimer);
     clickTimer = setTimeout(() => winApi?.toggleChat(), CLICK_DELAY_MS);
@@ -628,6 +717,19 @@ function initPortraitMode() {
   target.addEventListener('contextmenu', (event) => {
     event.preventDefault();
     winApi?.showMenu();
+  });
+
+  let ignoring = null;
+  const setIgnore = (value) => {
+    if (ignoring === value) return;
+    ignoring = value;
+    winApi?.setIgnoreMouse(value);
+  };
+  setIgnore(true);
+
+  document.addEventListener('mousemove', (event) => {
+    if (start) return;
+    setIgnore(!event.target.closest('.portrait-wrap'));
   });
 }
 
@@ -693,6 +795,7 @@ if (VIEW === 'chat') initChatWindow();
 showSprite('idle');
 bindEvents();
 initVoiceInput();
+
 runLoadingScreen().then(() => {
   elements.input.focus();
   blinkLoop();

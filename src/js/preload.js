@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('capriWindow', {
   dragStart: () => ipcRenderer.send('win:drag-start'),
   dragMove: () => ipcRenderer.send('win:drag-move'),
   dragEnd: () => ipcRenderer.send('win:drag-end'),
+  setIgnoreMouse: (ignore) => ipcRenderer.send('win:ignore-mouse', ignore),
   showMenu: () => ipcRenderer.send('win:menu'),
   sendState: (state) => ipcRenderer.send('win:state', state),
   onState: (callback) =>
@@ -37,15 +38,18 @@ contextBridge.exposeInMainWorld('capriSettings', {
     ipcRenderer.invoke('settings:set-groq-api-key', apiKey),
   setBraveApiKey: (apiKey) =>
     ipcRenderer.invoke('settings:set-brave-api-key', apiKey),
-  setGroqTextModel: (model) =>
-    ipcRenderer.invoke('settings:set-groq-text-model', model),
-  setGroqVoiceModel: (model) =>
-    ipcRenderer.invoke('settings:set-groq-voice-model', model),
-  setTimeZone: (timeZone) => ipcRenderer.invoke('settings:set-time-zone', timeZone),
+  setGroqTextModels: (models) =>
+    ipcRenderer.invoke('settings:set-groq-text-models', models),
+  setGroqVoiceModels: (models) =>
+    ipcRenderer.invoke('settings:set-groq-voice-models', models),
   setUserName: (userName) =>
     ipcRenderer.invoke('settings:set-user-name', userName),
   setRequireStart: (requireStart) =>
     ipcRenderer.invoke('settings:set-require-start', requireStart),
+  selectStartDirectory: () =>
+    ipcRenderer.invoke('capri-settings:select-start-directory'),
+  setStartDirectory: (directory) =>
+    ipcRenderer.invoke('capri-settings:set-start-directory', directory),
   setExecutableNickname: (category, executablePath, nickname) =>
     ipcRenderer.invoke(
       'settings:set-executable-nickname',

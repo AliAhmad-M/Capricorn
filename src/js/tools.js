@@ -176,6 +176,262 @@ const toolDefinitions = [
         required: []
       }
     }
+  },
+    {
+    type: 'function',
+    function: {
+      name: 'get_current_directory',
+      description:
+        'Show the folder that file tools currently work in. ' +
+        'Relative paths are resolved from here.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'change_directory',
+      description:
+        'Change the current working directory, like cd. ' +
+        'Accepts absolute paths, paths relative to the current directory, "..", "~", ' +
+        'or names like downloads, desktop, documents, pictures, music, videos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Folder to move into.'
+          }
+        },
+        required: ['path']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_directory',
+      description:
+        'List the files and folders inside a folder, like dir. ' +
+        'Use this when the user asks what is in a folder. ' +
+        'Does not change the current directory. ' +
+        'Accepts absolute paths, paths relative to the current directory, "..", "~", ' +
+        'or names like downloads, desktop, documents, pictures, music, videos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Folder to list. Defaults to the current directory.'
+          },
+          showHidden: {
+            type: 'boolean',
+            description: 'Include hidden files that start with a dot.'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'find_files',
+      description:
+        'Search for files or folders by name, searching subfolders too. ' +
+        'All words in the query must appear in the name.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Part of the file name, e.g. "resume pdf" or ".png".'
+          },
+          path: {
+            type: 'string',
+            description: 'Folder to search from. Defaults to the current directory.'
+          },
+          type: {
+            type: 'string',
+            enum: ['any', 'file', 'folder'],
+            description: 'Limit results to files or folders.'
+          }
+        },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_text_file',
+      description:
+        'Read a plain text file (notes, code, logs, config). ' +
+        'Fails on binary files such as images or executables.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'File to read.'
+          },
+          maxChars: {
+            type: 'integer',
+            description: 'Maximum characters to return, up to 20000.'
+          }
+        },
+        required: ['path']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'write_text_file',
+      description:
+        'Create or edit a text file. Existing files are not replaced unless overwrite is true, ' +
+        'and overwrite must only be set after the user has agreed to replace the file.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'File to write.'
+          },
+          content: {
+            type: 'string',
+            description: 'Text to write.'
+          },
+          append: {
+            type: 'boolean',
+            description: 'Add to the end of the file instead of replacing it.'
+          },
+          overwrite: {
+            type: 'boolean',
+            description: 'Replace an existing file. Only after the user agreed.'
+          }
+        },
+        required: ['path', 'content']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_directory',
+      description:
+        'Create a new folder, including any missing parent folders.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'Folder to create.'
+          }
+        },
+        required: ['path']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'copy_item',
+      description:
+        'Copy a file or folder. ' +
+        'If the destination is an existing folder, the copy goes inside it.',
+      parameters: {
+        type: 'object',
+        properties: {
+          source: {
+            type: 'string',
+            description: 'File or folder to copy.'
+          },
+          destination: {
+            type: 'string',
+            description: 'Target path or folder.'
+          },
+          overwrite: {
+            type: 'boolean',
+            description: 'Replace an existing item. Only after the user agreed.'
+          }
+        },
+        required: ['source', 'destination']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'move_item',
+      description:
+        'Move or rename a file or folder. ' +
+        'If the destination is an existing folder, the item goes inside it.',
+      parameters: {
+        type: 'object',
+        properties: {
+          source: {
+            type: 'string',
+            description: 'File or folder to move.'
+          },
+          destination: {
+            type: 'string',
+            description: 'New path, new name, or target folder.'
+          },
+          overwrite: {
+            type: 'boolean',
+            description: 'Replace an existing item. Only after the user agreed.'
+          }
+        },
+        required: ['source', 'destination']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_item',
+      description:
+        'Send a file or folder to the Recycle Bin. ' +
+        'Always ask the user to confirm first, and only set confirmed to true ' +
+        'once they have said yes to this exact deletion.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'File or folder to delete.'
+          },
+          confirmed: {
+            type: 'boolean',
+            description: 'True only after the user explicitly confirmed this deletion.'
+          }
+        },
+        required: ['path']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'open_path',
+      description:
+        'Open a file or folder with its default app, like double clicking it in Explorer.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description: 'File or folder to open.'
+          }
+        },
+        required: ['path']
+      }
+    }
   }
 ];
 
@@ -896,6 +1152,568 @@ async function checkNetworkConnectivity() {
   }
 }
 
+const MAX_LIST_ENTRIES = 100;
+const MAX_FIND_RESULTS = 30;
+const MAX_FIND_DEPTH = 8;
+const FIND_TIMEOUT_MS = 10000;
+const MAX_READ_BYTES = 1024 * 1024;
+const DEFAULT_READ_CHARS = 6000;
+const MAX_READ_CHARS = 20000;
+const MAX_WRITE_CHARS = 200000;
+
+const KNOWN_FOLDERS = ['desktop', 'documents', 'downloads', 'music', 'pictures', 'videos'];
+const HIDDEN_NAMES = /^(desktop\.ini|thumbs\.db)$/i;
+const SEARCH_IGNORED = new Set([
+  '$recycle.bin',
+  'system volume information',
+  '.git',
+  'node_modules',
+  'appdata',
+  'windows',
+  'program files',
+  'program files (x86)'
+]);
+
+class UserError extends Error {}
+
+const ERROR_MESSAGES = {
+  ENOENT: 'That path does not exist.',
+  EACCES: 'Permission denied.',
+  EPERM: 'Permission denied. The item may be in use or protected.',
+  EBUSY: 'The item is in use by another program.',
+  ENOTEMPTY: 'That folder is not empty.',
+  EEXIST: 'Something with that name already exists.',
+  EISDIR: 'That is a folder, not a file.',
+  ENOTDIR: 'Part of that path is not a folder.'
+};
+
+function describeError(error) {
+  if (error instanceof UserError) return `Error: ${error.message}`;
+  return `Error: ${ERROR_MESSAGES[error?.code] || error?.message || 'Unknown file error.'}`;
+}
+
+// Tools return their errors as text
+function guarded(fn) {
+  return async (args) => {
+    try {
+      return await fn(args || {});
+    } catch (error) {
+      return describeError(error);
+    }
+  };
+}
+
+function getElectron() {
+  try {
+    const electron = require('electron');
+    return typeof electron === 'object' ? electron : null;
+  } catch {
+    return null;
+  }
+}
+
+async function confirmAction(message, detail) {
+  const dialog = getElectron()?.dialog;
+  if (!dialog) {
+    throw new UserError('Could not ask for confirmation, so nothing was changed.');
+  }
+
+  const { response } = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Allow', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    title: 'Capricorn',
+    message,
+    detail
+  });
+
+  if (response !== 0) {
+    throw new UserError('The user declined, so nothing was changed.');
+  }
+}
+
+function getKnownFolder(name) {
+  try {
+    const app = getElectron()?.app;
+    if (app?.getPath) return app.getPath(name);
+  } catch {
+    // Fall through to the default location
+  }
+  return path.join(os.homedir(), name[0].toUpperCase() + name.slice(1));
+}
+
+async function exists(target) {
+  try {
+    await fs.access(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isDirectory(target) {
+  try {
+    return (await fs.stat(target)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// Working directory
+let currentDirectory = null;
+let lastStartDirectory = null;
+
+async function getCurrentDirectory(startDirectory = '') {
+  const start = String(startDirectory || '').trim() || os.homedir();
+
+  if (
+    currentDirectory === null ||
+    start !== lastStartDirectory ||
+    !(await isDirectory(currentDirectory))
+  ) {
+    lastStartDirectory = start;
+    currentDirectory = (await isDirectory(start)) ? start : os.homedir();
+  }
+
+  return currentDirectory;
+}
+
+// Turn whatever the model typed into an absolute path
+async function resolvePath(input, cwd) {
+  let target = String(input ?? '').trim().replace(/^["']+|["']+$/g, '');
+
+  if (!target || target === '.') return cwd;
+  if (/^[a-z]:$/i.test(target)) target += path.sep;
+  if (target === '~' || /^~[\\/]/.test(target)) {
+    return path.join(os.homedir(), target.slice(1));
+  }
+  if (path.isAbsolute(target)) return path.normalize(target);
+
+  // Prefer real folder over well known alias
+  const direct = path.resolve(cwd, target);
+  if (await exists(direct)) return direct;
+
+  const [first, ...rest] = target.split(/[\\/]+/);
+  const key = first.toLowerCase();
+
+  if (KNOWN_FOLDERS.includes(key)) {
+    return path.join(getKnownFolder(key), ...rest);
+  }
+  if (key === 'home') return path.join(os.homedir(), ...rest);
+
+  return direct;
+}
+
+function systemFolders() {
+  return [
+    process.env.SystemRoot,
+    process.env.ProgramFiles,
+    process.env['ProgramFiles(x86)'],
+    process.env.ProgramData
+  ].filter(Boolean).map((folder) => path.resolve(folder).toLowerCase());
+}
+
+// Nothing may be changed inside these
+function assertNotSystemPath(target) {
+  const lower = path.resolve(target).toLowerCase();
+  if (systemFolders().some((folder) => lower === folder || lower.startsWith(folder + path.sep))) {
+    throw new UserError(`Refusing to modify a system location: ${target}`);
+  }
+}
+
+// Top-level folders can't be deleted or moved as a whole
+function assertNotProtectedRoot(target) {
+  const resolved = path.resolve(target);
+  const lower = resolved.toLowerCase();
+  const protectedPaths = new Set([
+    path.parse(resolved).root.toLowerCase(),
+    os.homedir().toLowerCase(),
+    ...KNOWN_FOLDERS.map((name) => path.resolve(getKnownFolder(name)).toLowerCase())
+  ]);
+
+  if (protectedPaths.has(lower)) {
+    throw new UserError(`Refusing to delete or move a top-level folder: ${target}`);
+  }
+}
+
+// Recursive directory walker used by find_files
+async function walkDirectory(root, {
+  maxDepth = MAX_SCAN_DEPTH,
+  visited = new Set(),
+  isIgnoredDir = () => false,
+  shouldStop = () => false,
+  onDirectory,
+  onFile
+} = {}) {
+  async function visit(directory, depth) {
+    if (depth > maxDepth || shouldStop()) return;
+
+    let resolved;
+    try {
+      resolved = await fs.realpath(directory);
+      if (!(await fs.stat(resolved)).isDirectory()) return;
+    } catch {
+      return;
+    }
+
+    // Prevent duplicate scans and loops
+    const key = resolved.toLowerCase();
+    if (visited.has(key)) return;
+    visited.add(key);
+
+    let entries;
+    try {
+      entries = await fs.readdir(resolved, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (shouldStop()) return;
+      if (entry.name.startsWith('$')) continue;
+
+      const fullPath = path.join(resolved, entry.name);
+
+      if (entry.isDirectory()) {
+        if (isIgnoredDir(entry.name)) continue;
+        await onDirectory?.(fullPath, depth);
+        await visit(fullPath, depth + 1);
+      } else if (entry.isFile()) {
+        await onFile?.(fullPath, entry, depth);
+      }
+    }
+  }
+
+  await visit(root, 0);
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let unit = 0;
+
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+
+  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+}
+
+const formatDate = (date) => date.toISOString().slice(0, 10);
+
+async function getCurrentDirectoryTool({ startDirectory }) {
+  return `Current directory: ${await getCurrentDirectory(startDirectory)}`;
+}
+
+async function changeDirectory({ path: requested, startDirectory }) {
+  const cwd = await getCurrentDirectory(startDirectory);
+  const target = await resolvePath(requested, cwd);
+
+  if (!(await isDirectory(target))) {
+    throw new UserError(`"${requested}" is not a folder. Looked for ${target}`);
+  }
+
+  try {
+    currentDirectory = await fs.realpath(target);
+  } catch {
+    currentDirectory = target;
+  }
+
+  return `Now in ${currentDirectory}`;
+}
+
+async function listDirectory({ path: requested, showHidden = false, startDirectory }) {
+  const cwd = await getCurrentDirectory(startDirectory);
+  const target = await resolvePath(requested, cwd);
+
+  if (!(await isDirectory(target))) {
+    throw new UserError(`"${requested}" is not a folder. Looked for ${target}`);
+  }
+
+  const entries = await fs.readdir(target, { withFileTypes: true });
+  const rows = (await Promise.all(entries.map(async (entry) => {
+    if (!showHidden && (entry.name.startsWith('.') || HIDDEN_NAMES.test(entry.name))) {
+      return null;
+    }
+
+    let stats = null;
+    try {
+      stats = await fs.stat(path.join(target, entry.name));
+    } catch {
+      // Broken links and locked files do not display stats
+    }
+
+    return {
+      name: entry.name,
+      isDirectory: stats ? stats.isDirectory() : entry.isDirectory(),
+      size: stats?.size ?? 0,
+      modified: stats?.mtime
+    };
+  }))).filter(Boolean);
+
+  rows.sort((a, b) =>
+    Number(b.isDirectory) - Number(a.isDirectory) ||
+    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+  );
+
+  const folderCount = rows.filter((row) => row.isDirectory).length;
+  const lines = rows.slice(0, MAX_LIST_ENTRIES).map((row) =>
+    row.isDirectory
+      ? `[folder] ${row.name}`
+      : `[file] ${row.name} (${formatSize(row.size)}${row.modified ? `, ${formatDate(row.modified)}` : ''})`
+  );
+
+  if (rows.length === 0) return `${target} is empty.`;
+
+  const header =
+    `Contents of ${target} (${folderCount} folders, ${rows.length - folderCount} files):`;
+  const footer = rows.length > MAX_LIST_ENTRIES
+    ? [`...and ${rows.length - MAX_LIST_ENTRIES} more. Use find_files to narrow it down.`]
+    : [];
+
+  return [header, ...lines, ...footer].join('\n');
+}
+
+async function findFiles({ query, path: searchPath, type = 'any', startDirectory }) {
+  const words = String(query ?? '')
+    .toLowerCase()
+    .replace(/\*/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) throw new UserError('A search query is required.');
+
+  const cwd = await getCurrentDirectory(startDirectory);
+  const root = await resolvePath(searchPath, cwd);
+
+  if (!(await isDirectory(root))) {
+    throw new UserError(`"${searchPath}" is not a folder. Looked for ${root}`);
+  }
+
+  const results = [];
+  const deadline = Date.now() + FIND_TIMEOUT_MS;
+  let timedOut = false;
+
+  const check = (fullPath, isDir) => {
+    if (results.length >= MAX_FIND_RESULTS) return;
+
+    const name = path.basename(fullPath).toLowerCase();
+    if (words.every((word) => name.includes(word))) {
+      results.push(`${isDir ? '[folder]' : '[file]'} ${fullPath}`);
+    }
+  };
+
+  await walkDirectory(root, {
+    maxDepth: MAX_FIND_DEPTH,
+    isIgnoredDir: (name) => SEARCH_IGNORED.has(name.toLowerCase()),
+    shouldStop: () => {
+      if (Date.now() > deadline) {
+        timedOut = true;
+        return true;
+      }
+      return results.length >= MAX_FIND_RESULTS;
+    },
+    onDirectory: (fullPath) => {
+      if (type !== 'file') check(fullPath, true);
+    },
+    onFile: (fullPath) => {
+      if (type !== 'folder') check(fullPath, false);
+    }
+  });
+
+  if (results.length === 0) {
+    return `No matches for "${query}" under ${root}${timedOut ? ' (search timed out)' : ''}.`;
+  }
+
+  const notes = [];
+  if (results.length >= MAX_FIND_RESULTS) notes.push(`Stopped at ${MAX_FIND_RESULTS} results.`);
+  if (timedOut) notes.push('Search timed out, so results may be incomplete.');
+
+  return [`Matches for "${query}" under ${root}:`, ...results, ...notes].join('\n');
+}
+
+async function readTextFile({ path: requested, maxChars = DEFAULT_READ_CHARS, startDirectory }) {
+  const cwd = await getCurrentDirectory(startDirectory);
+  const target = await resolvePath(requested, cwd);
+  const stats = await fs.stat(target);
+
+  if (stats.isDirectory()) {
+    throw new UserError(`${target} is a folder. Use list_directory instead.`);
+  }
+  if (stats.size > MAX_READ_BYTES) {
+    throw new UserError(`${path.basename(target)} is ${formatSize(stats.size)}, too large to read.`);
+  }
+
+  const buffer = await fs.readFile(target);
+  if (buffer.subarray(0, 8000).includes(0)) {
+    throw new UserError(`${path.basename(target)} looks like a binary file, not text.`);
+  }
+
+  const limit = Number.isInteger(maxChars)
+    ? Math.min(MAX_READ_CHARS, Math.max(100, maxChars))
+    : DEFAULT_READ_CHARS;
+  const text = buffer.toString('utf8');
+
+  return text.length > limit
+    ? `${text.slice(0, limit)}\n\n[Truncated, file has ${text.length} characters]`
+    : text || '(The file is empty.)';
+}
+
+async function writeTextFile({
+  path: requested,
+  content,
+  append = false,
+  overwrite = false,
+  startDirectory
+}) {
+  if (typeof content !== 'string') throw new UserError('File content must be text.');
+  if (content.length > MAX_WRITE_CHARS) throw new UserError('That content is too large to write.');
+
+  const cwd = await getCurrentDirectory(startDirectory);
+  const target = await resolvePath(requested, cwd);
+  assertNotSystemPath(target);
+
+  if (await isDirectory(target)) throw new UserError(`${target} is a folder.`);
+  if (!(await isDirectory(path.dirname(target)))) {
+    throw new UserError(`The folder ${path.dirname(target)} does not exist. Create it first.`);
+  }
+
+  if (!append && !overwrite && (await exists(target))) {
+    return `${target} already exists. Ask the user whether to replace it, then call again with overwrite set to true.`;
+  }
+
+  const replacing = !append && (await exists(target));
+  await confirmAction(
+    append ? 'Append to this file?' : replacing ? 'Replace this file?' : 'Create this file?',
+    target
+  );
+
+  await (append ? fs.appendFile : fs.writeFile)(target, content, 'utf8');
+  return `${append ? 'Appended to' : 'Wrote'} ${target}.`;
+}
+
+async function createDirectory({ path: requested, startDirectory }) {
+  const cwd = await getCurrentDirectory(startDirectory);
+  const target = await resolvePath(requested, cwd);
+  assertNotSystemPath(target);
+
+  if (await isDirectory(target)) return `${target} already exists.`;
+
+  await fs.mkdir(target, { recursive: true });
+  return `Created folder ${target}.`;
+}
+
+async function resolveDestination(source, destination, cwd) {
+  let target = await resolvePath(destination, cwd);
+
+  // Moving or copying into an existing folder keeps the original name
+  if (await isDirectory(target)) target = path.join(target, path.basename(source));
+
+  assertNotSystemPath(target);
+  return target;
+}
+
+async function copyItem({ source, destination, overwrite = false, startDirectory }) {
+  const cwd = await getCurrentDirectory(startDirectory);
+  const from = await resolvePath(source, cwd);
+
+  if (!(await exists(from))) throw new UserError(`${from} does not exist.`);
+
+  const to = await resolveDestination(from, destination, cwd);
+
+  if (!overwrite && (await exists(to))) {
+    return `${to} already exists. Ask the user whether to replace it, then call again with overwrite set to true.`;
+  }
+
+  await confirmAction('Copy this item?', `${from}\n -> ${to}`);
+  await fs.cp(from, to, { recursive: true, force: overwrite, errorOnExist: !overwrite });
+  return `Copied ${from} to ${to}.`;
+}
+
+async function moveItem({ source, destination, overwrite = false, startDirectory }) {
+  const cwd = await getCurrentDirectory(startDirectory);
+  const from = await resolvePath(source, cwd);
+
+  if (!(await exists(from))) throw new UserError(`${from} does not exist.`);
+
+  assertNotSystemPath(from);
+  assertNotProtectedRoot(from);
+
+  const to = await resolveDestination(from, destination, cwd);
+
+  if (path.resolve(from) === path.resolve(to)) return `${from} is already there.`;
+  if (!overwrite && (await exists(to)) && from.toLowerCase() !== to.toLowerCase()) {
+    return `${to} already exists. Ask the user whether to replace it, then call again with overwrite set to true.`;
+  }
+
+  await confirmAction('Move this item?', `${from}\n -> ${to}`);
+  try {
+    await fs.rename(from, to);
+  } catch (error) {
+    if (error.code !== 'EXDEV') throw error;
+
+    // Different drives can't be renamed across, so copy and then remove
+    await fs.cp(from, to, { recursive: true, force: overwrite, errorOnExist: !overwrite });
+    await fs.rm(from, { recursive: true, force: true });
+  }
+
+  return `Moved ${from} to ${to}.`;
+}
+
+async function deleteItem({ path: requested, confirmed = false, startDirectory }) {
+  const cwd = await getCurrentDirectory(startDirectory);
+  const target = await resolvePath(requested, cwd);
+
+  if (!(await exists(target))) throw new UserError(`${target} does not exist.`);
+
+  assertNotSystemPath(target);
+  assertNotProtectedRoot(target);
+
+  if (confirmed !== true) {
+    return `Not deleted yet. Ask the user to confirm deleting ${target}, then call again with confirmed set to true.`;
+  }
+
+  confirmAction('Move this to the Recycle Bin?', target);
+  const shell = getElectron()?.shell;
+  if (!shell?.trashItem) {
+    throw new UserError('The Recycle Bin is unavailable, so nothing was deleted.');
+  }
+
+  await shell.trashItem(target);
+  return `Moved ${target} to the Recycle Bin.`;
+}
+
+async function openPath({ path: requested, startDirectory }) {
+  const cwd = await getCurrentDirectory(startDirectory);
+  const target = await resolvePath(requested, cwd);
+
+  if (!(await exists(target))) throw new UserError(`${target} does not exist.`);
+
+  const shell = getElectron()?.shell;
+  if (!shell?.openPath) throw new UserError('Opening files is unavailable here.');
+
+  // openPath resolves to an empty string on success, or an error message
+  const failure = await shell.openPath(target);
+  if (failure) throw new UserError(failure);
+
+  return `Opened ${target}.`;
+}
+
+function define(name, description, properties = {}, required = []) {
+  return {
+    type: 'function',
+    function: {
+      name,
+      description,
+      parameters: { type: 'object', properties, required }
+    }
+  };
+}
+
 const toolImplementations = {
   fetch_url: fetchUrl,
   web_search: webSearch,
@@ -906,7 +1724,18 @@ const toolImplementations = {
   launch_software: launchSoftware,
   get_system_usage: getSystemUsage,
   list_resource_processes: listResourceProcesses,
-  check_network_connectivity: checkNetworkConnectivity
+  check_network_connectivity: checkNetworkConnectivity,
+  get_current_directory: guarded(getCurrentDirectoryTool),
+  change_directory: guarded(changeDirectory),
+  list_directory: guarded(listDirectory),
+  find_files: guarded(findFiles),
+  read_text_file: guarded(readTextFile),
+  write_text_file: guarded(writeTextFile),
+  create_directory: guarded(createDirectory),
+  copy_item: guarded(copyItem),
+  move_item: guarded(moveItem),
+  delete_item: guarded(deleteItem),
+  open_path: guarded(openPath)
 };
 
 // Execute a tool call and return result or error message
@@ -974,6 +1803,28 @@ async function executeToolCall(toolCall, settings = {}) {
           typeof settings.softwareExecutableNicknames === 'object'
             ? settings.softwareExecutableNicknames
             : {}
+      };
+    }
+
+    // File tools
+    if (
+      [
+        'get_current_directory',
+        'change_directory',
+        'list_directory',
+        'find_files',
+        'read_text_file',
+        'write_text_file',
+        'create_directory',
+        'copy_item',
+        'move_item',
+        'delete_item',
+        'open_path'
+      ].includes(name)
+    ) {
+      effectiveArgs = {
+        ...args,
+        startDirectory: settings.startDirectory || ''
       };
     }
 

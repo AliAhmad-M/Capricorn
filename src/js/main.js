@@ -16,7 +16,12 @@ const brain = require('./brain');
 
 app.setAppUserModelId('com.ali.capricorn');
 
-const PORTRAIT_SIZE = { width: 220, height: 220 };
+const PORTRAIT_SIZE = { width: 200, height: 200 };
+const BUBBLE_ROOM = 110;
+const PORTRAIT_WINDOW = {
+  width: PORTRAIT_SIZE.width,
+  height: PORTRAIT_SIZE.height + BUBBLE_ROOM,
+};
 const CHAT_SIZE = { width: 400, height: 500 };
 const CHAT_GAP = 12;
 const TOGGLE_KEY = 'CommandOrControl+Alt+C';
@@ -48,26 +53,45 @@ let appSettings = {
   gameExecutableNicknames: {},
   softwareExecutableNicknames: {},
   userName: '',
+  startDirectory: '',
   requireStart: false,
   groqApiKey: '',
   braveApiKey: '',
-  groqTextModel: '',
-  groqVoiceModel: '',
+  groqTextModels: [],
+  groqVoiceModels: [],
 };
+
+function normalizeModelList(models) {
+  const entries = Array.isArray(models)
+    ? models
+    : typeof models === 'string'
+      ? models.split(/[\r\n,]+/)
+      : [];
+
+  return [...new Set(
+    entries
+      .filter((model) => typeof model === 'string')
+      .map((model) => model.trim())
+      .filter(Boolean)
+  )].slice(0, 3);
+}
 
 function normalizeGroqSettings(settings) {
   return {
     groqApiKey: typeof settings.groqApiKey === 'string'
       ? settings.groqApiKey.trim()
       : '',
-    groqTextModel: typeof settings.groqTextModel === 'string'
-      ? settings.groqTextModel.trim()
-      : typeof settings.groqModel === 'string'
-        ? settings.groqModel.trim()
-        : '',
-    groqVoiceModel: typeof settings.groqVoiceModel === 'string'
-      ? settings.groqVoiceModel.trim()
-      : '',
+
+    groqTextModels: normalizeModelList(
+      settings.groqTextModels ??
+      settings.groqTextModel ??
+      settings.groqModel
+    ),
+
+    groqVoiceModels: normalizeModelList(
+      settings.groqVoiceModels ??
+      settings.groqVoiceModel
+    ),
   };
 }
 
@@ -166,6 +190,9 @@ async function loadSettings() {
       saved.softwareExecutableNicknames
     ),
     userName: normalizeUserName(saved.userName),
+    startDirectory: typeof saved.startDirectory === 'string'
+      ? saved.startDirectory.trim()
+      : '',
     requireStart: saved.requireStart === true,
     braveApiKey: typeof saved.braveApiKey === 'string'
       ? saved.braveApiKey.trim()
@@ -173,6 +200,8 @@ async function loadSettings() {
     ...normalizeGroqSettings(saved),
   };
   delete appSettings.groqModel;
+  delete appSettings.groqTextModel;
+  delete appSettings.groqVoiceModel;
 
   if (migrated) await writeSettings(appSettings);
 }
@@ -269,9 +298,14 @@ function placeChat(portrait) {
   };
 }
 
+function portraitRect() {
+  const b = portraitWin.getBounds();
+  return { x: b.x, y: b.y + BUBBLE_ROOM, width: b.width, height: b.height - BUBBLE_ROOM };
+}
+
 function openChat() {
   if (!portraitWin.isVisible()) return;
-  const { x, y } = placeChat(portraitWin.getBounds());
+  const { x, y } = placeChat(portraitRect());
   chatWin.setBounds({ x, y, ...CHAT_SIZE });
   chatWin.show();
   chatWin.focus();
@@ -367,6 +401,7 @@ ipcMain.handle('settings:get', () => {
   const { groqApiKey, braveApiKey, ...settings } = appSettings;
   return {
     ...settings,
+    defaultStartDirectory: app.getPath('home'),
     ...brain.getConfiguration(appSettings),
     hasGroqApiKeyOverride: Boolean(groqApiKey),
     hasBraveApiKey: Boolean(braveApiKey),
@@ -382,6 +417,20 @@ async function saveGroqSetting(setting, value) {
     ...brain.getConfiguration(appSettings),
     hasGroqApiKeyOverride: Boolean(appSettings.groqApiKey),
   };
+}
+
+function validateGroqModelList(models, label) {
+  if (!Array.isArray(models) || models.length > 3) {
+    throw new Error(`Enter up to 3 ${label} models.`);
+  }
+
+  if (models.some(
+    (model) => typeof model !== 'string' || model.length > 200
+  )) {
+    throw new Error(`${label} model IDs must be 200 characters or fewer.`);
+  }
+
+  return normalizeModelList(models);
 }
 
 ipcMain.handle('settings:set-groq-api-key', async (_event, apiKey) => {
@@ -403,20 +452,18 @@ ipcMain.handle('settings:set-brave-api-key', async (_event, apiKey) => {
   return { hasBraveApiKey: Boolean(appSettings.braveApiKey) };
 });
 
-ipcMain.handle('settings:set-groq-text-model', async (_event, model) => {
-  if (typeof model !== 'string' || model.length > 200) {
-    throw new Error('Groq model must be 200 characters or fewer.');
-  }
-
-  return saveGroqSetting('groqTextModel', model.trim());
+ipcMain.handle('settings:set-groq-text-models', async (_event, models) => {
+  return saveGroqSetting(
+    'groqTextModels',
+    validateGroqModelList(models, 'text')
+  );
 });
 
-ipcMain.handle('settings:set-groq-voice-model', async (_event, model) => {
-  if (typeof model !== 'string' || model.length > 200) {
-    throw new Error('Groq transcription model must be 200 characters or fewer.');
-  }
-
-  return saveGroqSetting('groqVoiceModel', model.trim());
+ipcMain.handle('settings:set-groq-voice-models', async (_event, models) => {
+  return saveGroqSetting(
+    'groqVoiceModels',
+    validateGroqModelList(models, 'voice')
+  );
 });
 
 ipcMain.handle('settings:set-time-zone', async (_event, timeZone) => {
@@ -596,6 +643,36 @@ ipcMain.handle('capri-settings:set-software-paths', (_event, paths) =>
   saveDirectoryPaths(paths, 'softwarePaths', 'software')
 );
 
+ipcMain.handle('capri-settings:select-start-directory', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Select Start Folder',
+    defaultPath: appSettings.startDirectory || app.getPath('home'),
+    properties: ['openDirectory']
+  });
+
+  return result.canceled ? [] : result.filePaths;
+});
+
+ipcMain.handle('capri-settings:set-start-directory', async (_event, directory) => {
+  if (typeof directory !== 'string' || directory.length > 1024) {
+    throw new Error('Invalid start folder.');
+  }
+
+  // An empty string resets to the default
+  let resolved = '';
+  if (directory.trim()) {
+    resolved = await fs.realpath(path.resolve(directory.trim()));
+    if (!(await fs.stat(resolved)).isDirectory()) {
+      throw new Error('Not a folder: ' + resolved);
+    }
+  }
+
+  const updatedSettings = { ...appSettings, startDirectory: resolved };
+  await writeSettings(updatedSettings);
+  appSettings = updatedSettings;
+  return { startDirectory: resolved };
+});
+
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 
 ipcMain.handle('capri:transcribe', async (_event, audio) => {
@@ -660,8 +737,7 @@ ipcMain.on('win:settings-close', closeSettings);
 ipcMain.on('win:chat-toggle', () => (chatWin.isVisible() ? closeChat() : openChat()));
 ipcMain.on('win:chat-close', closeChat);
 
-// Dragging: the renderer only says start / move / end, the cursor
-// position is read here so it stays correct while the window moves
+// Dragging
 let dragOrigin = null;
 
 ipcMain.on('win:drag-start', () => {
@@ -694,7 +770,7 @@ ipcMain.on('win:drag-end', () => {
   dragOrigin = null;
   // Adjust chat position if portrait moved and chat is open
   if (moved && chatWin.isVisible()) {
-    const { x, y } = placeChat(portraitWin.getBounds());
+    const { x, y } = placeChat(portraitRect());
     chatWin.setBounds({ x, y, ...CHAT_SIZE });
   }
 });
@@ -707,6 +783,10 @@ ipcMain.on('win:menu', () => {
     { type: 'separator' },
     { label: 'Quit Capricorn', click: () => app.quit() },
   ]).popup({ window: portraitWin });
+});
+
+ipcMain.on('win:ignore-mouse', (_event, ignore) => {
+  portraitWin?.setIgnoreMouseEvents(ignore === true, { forward: true });
 });
 
 app.whenReady().then(async () => {
@@ -728,14 +808,12 @@ app.whenReady().then(async () => {
     console.error('Failed to load settings:', error.message);
   }
 
-  // Start loading the model in parallel
-  warmUp();
-
   const { workArea } = screen.getPrimaryDisplay();
-  portraitWin = createOverlay('portrait', PORTRAIT_SIZE, {
+    portraitWin = createOverlay('portrait', PORTRAIT_WINDOW, {
     x: workArea.x + workArea.width - PORTRAIT_SIZE.width - 40,
-    y: workArea.y + workArea.height - PORTRAIT_SIZE.height - 40,
+    y: workArea.y + workArea.height - PORTRAIT_SIZE.height - BUBBLE_ROOM - 40,
   });
+
   chatWin = createOverlay('chat', CHAT_SIZE);
   createFullWindow();
   globalShortcut.register(TOGGLE_KEY, toggleView);

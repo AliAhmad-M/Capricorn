@@ -69,6 +69,10 @@ body::after {
     radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.45) 100%);
 }
 
+button:disabled {
+  cursor: not-allowed;
+}
+
 .app {
   position: relative;
   z-index: 1;
@@ -98,9 +102,73 @@ body::after {
 
 .side {
   display: flex;
+  position: relative;
   flex-direction: column;
   gap: 14px;
+  padding-top: 120px;
   min-height: 0;
+}
+
+.drag-speech {
+  --cut: 14px;
+  position: absolute;
+  left: 50%;
+  width: max-content;
+  --bubble-max: min(220px, calc(100vw - 24px));
+  max-width: var(--bubble-max);
+  min-width: calc(var(--bubble-max) * 0.75);
+  padding: 24px 14px 10px;
+  z-index: 100;
+  isolation: isolate;
+  pointer-events: none;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  background: linear-gradient(165deg, rgba(0, 240, 255, 0.75), rgba(255, 42, 109, 0.75));
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)),
+                     calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  filter: drop-shadow(0 0 14px rgba(0, 240, 255, 0.25));
+  animation: drag-speech-in 0.15s ease-out;
+}
+
+/* inner fill, same offset trick as .frame-inner */
+.drag-speech::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  background: #06000e;
+  clip-path: polygon(calc(var(--cut) - 2px) 0, 100% 0, 100% calc(100% - var(--cut) + 2px),
+                     calc(100% - var(--cut) + 2px) 100%, 0 100%, 0 calc(var(--cut) - 2px));
+}
+
+.drag-speech::before {
+  content: "[CAPRI]";
+  position: absolute;
+  top: 7px;
+  left: 18px;
+  color: var(--cyan);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 6px var(--cyan);
+}
+
+.drag-speech[hidden] {
+  display: none;
+}
+
+@keyframes drag-speech-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
 }
 
 .portrait-wrap {
@@ -197,6 +265,16 @@ body[data-state="eureka"] .portrait::before {
   background: #fff;
   animation: flash 0.5s ease-out forwards;
   pointer-events: none;
+}
+
+@keyframes flash {
+  0% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
 }
 
 .status {
@@ -476,7 +554,7 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
   color: var(--steel);
 }
 
-.dock {
+.small-button {
   font: inherit;
   font-size: 13px;
   color: var(--steel);
@@ -504,7 +582,7 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
   stroke-width: 1.5;
 }
 
-.dock:hover:not(:disabled) {
+.small-button:hover:not(:disabled) {
   color: var(--cyan);
   border-color: var(--cyan);
   box-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
@@ -576,7 +654,7 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
 }
 
 .settings-user,
-.settings-game-paths,
+.settings-path,
 .settings-timezone {
   display: flex;
   flex-direction: column;
@@ -856,7 +934,7 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
   transform: translateY(-70%) rotate(45deg);
 }
 
-.settings-game-paths-header {
+.settings-path-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -876,6 +954,57 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
   align-items: flex-end;
   gap: 10px;
   width: 100%;
+}
+
+.settings-model-settings {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
+.settings-model-settings .settings-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 700px;
+}
+
+.settings-model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-model-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-model-priority {
+  color: var(--steel);
+  font-size: 13px;
+  text-align: center;
+}
+
+.settings-model-input {
+  max-width: none;
+  min-width: 0;
+}
+
+.settings-model-remove {
+  min-width: 76px;
+  min-height: 42px;
+}
+
+.settings-model-add {
+  align-self: flex-end;
+  min-width: 128px;
+}
+
+.settings-model-settings .settings-save-button {
+  align-self: flex-end;
 }
 
 .settings-input-save-row .settings-field {
@@ -1188,18 +1317,18 @@ body[data-state="think"] .dot, body[data-state="respond"] .dot {
     align-items: flex-start;
   }
 
-  .settings-header .dock {
+  .settings-header .small-button {
     flex-shrink: 0;
     padding: 5px 8px;
   }
 
   .settings-user,
-  .settings-game-paths,
+  .settings-path,
   .settings-timezone {
     padding: 16px;
   }
 
-  .settings-game-paths-header {
+  .settings-path-header {
     grid-template-columns: 1fr;
     align-items: start;
   }
@@ -1260,12 +1389,36 @@ body[data-view="chat"] .side {
   display: none;
 }
 
+body[data-view="portrait"] .side {
+  position: static !important;
+  display: block !important;
+  padding: 0 !important;
+  height: auto !important;
+}
+
 body[data-view="portrait"] .portrait-wrap {
-  max-width: none;
-  filter: none;
-  cursor: grab;
-  user-select: none;
-  touch-action: none;
+  position: fixed !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  flex: none !important;
+}
+
+body[data-view="portrait"] .portrait-wrap .frame {
+  height: auto !important;
+}
+
+body[data-view="portrait"] .portrait {
+  height: auto !important;
+  aspect-ratio: 1 / 1 !important;
+}
+
+body[data-view="portrait"] .drag-speech {
+  position: fixed !important;
+  top: auto !important;
+  left: 50% !important;
+  bottom: calc(100vw + 10px) !important;
+  transform: translateX(-50%) !important;
 }
 
 body[data-view="portrait"] .portrait-wrap:active { cursor: grabbing; }
@@ -1312,6 +1465,20 @@ body[data-view="chat"] .composer-mic:hover:not(:disabled) {
   flex-direction: column;
   gap: 14px;
   padding-right: 6px;
+  scrollbar-color: var(--cyan) rgba(255, 255, 255, 0.05);
+}
+
+.log::-webkit-scrollbar {
+  width: 12px;
+}
+
+.log::-webkit-scrollbar-thumb {
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+}
+
+.log::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .empty {
@@ -1506,8 +1673,6 @@ body[data-view="chat"] .composer-mic:hover:not(:disabled) {
     grid-column: 1 / -1;
   }
 
-  /* Every input (with or without an eye) uses column 1 only,
-     so they all have the same width */
   .settings-input-save-row .settings-text-input {
     grid-column: 1;
     width: 100%;
@@ -1533,5 +1698,29 @@ body[data-view="chat"] .composer-mic:hover:not(:disabled) {
     padding: 3px 6px;
     font-size: 11px;
     margin: 0;
+  }
+
+  .settings-model-settings {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-model-settings .settings-field {
+    max-width: none;
+  }
+
+  .settings-model-settings .settings-save-button {
+    align-self: flex-end;
+    margin-left: 0;
+  }
+
+  .settings-model-row {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
+  .settings-model-remove {
+    min-width: 64px;
+    padding-inline: 8px;
   }
 }

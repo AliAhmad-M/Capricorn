@@ -2,9 +2,9 @@ const Groq = require('groq-sdk');
 const { toolDefinitions, executeToolCall } = require('./tools');
 const { CAPRI_SYSTEM_PROMPT } = require('./prompt');
 
-const DEFAULT_TEXT_MODEL = 'qwen/qwen3.8-27b';
-const DEFAULT_VOICE_MODEL = 'whisper-large-v3-turbo';
-const MAX_TOOL_ROUNDS = 5;
+const DEFAULT_TEXT_MODELS = ['qwen/qwen3.8-27b'];
+const DEFAULT_VOICE_MODELS = ['whisper-large-v3-turbo'];
+const MAX_TOOL_ROUNDS = 8;
 const MAX_TOOL_RETRIES = 3;
 const MAX_HISTORY = 10;
 const TOOL_ACTIVITY_LABELS = {
@@ -18,6 +18,17 @@ const TOOL_ACTIVITY_LABELS = {
   get_system_usage: 'Checking system usage...',
   list_resource_processes: 'Finding resource-heavy processes...',
   check_network_connectivity: 'Checking network connectivity...',
+  get_current_directory: 'Checking the current folder...',
+  change_directory: 'Changing folder...',
+  list_directory: 'Looking through the folder...',
+  find_files: 'Searching for files...',
+  read_text_file: 'Reading file...',
+  write_text_file: 'Writing file...',
+  create_directory: 'Creating folder...',
+  copy_item: 'Copying...',
+  move_item: 'Moving...',
+  delete_item: 'Deleting...',
+  open_path: 'Opening...',
 };
 
 const TOOL_NAMES = toolDefinitions.map((tool) => tool.function.name);
@@ -40,13 +51,61 @@ function getClient(settings = {}) {
   return client;
 }
 
+function normalizeModelList(models) {
+  const entries = Array.isArray(models)
+    ? models
+    : typeof models === 'string'
+      ? models.split(/[\r\n,]+/)
+      : [];
+
+  return [...new Set(
+    entries
+      .filter((model) => typeof model === 'string')
+      .map((model) => model.trim())
+      .filter(Boolean)
+  )];
+}
+
+function getTextModels(settings = {}) {
+  const configured = normalizeModelList(settings.groqTextModels);
+  if (configured.length) return configured;
+
+  // Support older single-model settings.
+  const legacy = normalizeModelList(
+    settings.groqTextModel || settings.groqModel
+  );
+  if (legacy.length) return legacy;
+
+  const envModels = normalizeModelList([
+    ...normalizeModelList(process.env.GROQ_TEXT_MODELS),
+    ...normalizeModelList(process.env.GROQ_TEXT_MODEL),
+  ]);
+
+  return envModels.length ? envModels : [...DEFAULT_TEXT_MODELS];
+}
+
+function getVoiceModels(settings = {}) {
+  const configured = normalizeModelList(settings.groqVoiceModels);
+  if (configured.length) return configured;
+
+  // Support older single-model settings.
+  const legacy = normalizeModelList(settings.groqVoiceModel);
+  if (legacy.length) return legacy;
+
+  const envModels = normalizeModelList([
+    ...normalizeModelList(process.env.GROQ_VOICE_MODELS),
+    ...normalizeModelList(process.env.GROQ_VOICE_MODEL),
+  ]);
+
+  return envModels.length ? envModels : [...DEFAULT_VOICE_MODELS];
+}
+
 function getModel(settings = {}) {
-  return settings.groqTextModel || settings.groqModel ||
-    process.env.GROQ_TEXT_MODEL || DEFAULT_TEXT_MODEL;
+  return getTextModels(settings)[0];
 }
 
 function getVoiceModel(settings = {}) {
-  return settings.groqVoiceModel || process.env.GROQ_VOICE_MODEL || DEFAULT_VOICE_MODEL;
+  return getVoiceModels(settings)[0];
 }
 
 function getFriendlyErrorMessage(error) {
@@ -99,10 +158,15 @@ function getFriendlyErrorMessage(error) {
 }
 
 function getConfiguration(settings = {}) {
+  const groqTextModels = getTextModels(settings);
+  const groqVoiceModels = getVoiceModels(settings);
+
   return {
     groqApiKey: settings.groqApiKey || process.env.GROQ_API_KEY || '',
-    groqTextModel: getModel(settings),
-    groqVoiceModel: getVoiceModel(settings),
+    groqTextModel: groqTextModels[0],
+    groqTextModels,
+    groqVoiceModel: groqVoiceModels[0],
+    groqVoiceModels,
   };
 }
 
@@ -145,59 +209,175 @@ function isToolCallFailure(error) {
   );
 }
 
-// Sampling again usually produces a valid tool call
-async function createCompletion(settings, messages) {
-  const model = getModel(settings);
-
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await getClient(settings).chat.completions.create({
-        model,
-        messages,
-        tools: toolDefinitions,
-        temperature: 0.4,
-      });
-    } catch (error) {
-      if (!isToolCallFailure(error) || attempt >= MAX_TOOL_RETRIES) throw error;
-      console.warn(`[capri:retry] bad tool call (${attempt + 1}/${MAX_TOOL_RETRIES})`);
-    }
+function shouldFallbackToNextModel(error) {
+  if (
+    error?.code === 'MODEL_OUTPUT_LIMIT' ||
+    error?.code === 'MODEL_EMPTY_RESPONSE' ||
+    isToolCallFailure(error)
+  ) {
+    return true;
   }
+
+  const status = Number(error?.status || error?.statusCode);
+  const details = [
+    error?.message,
+    error?.code,
+    error?.cause?.code,
+    error?.name,
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  // Authentication errors
+  if (
+    status === 401 ||
+    /authenticationerror|invalid api key|incorrect api key/.test(details)
+  ) {
+    return false;
+  }
+
+  // Availability errors
+  if ([403, 404, 408, 409, 413, 429].includes(status) || status >= 500) {
+    return true;
+  }
+
+  // Handle token limits, context limits, unavailable models and network errors
+  return /model.{0,50}(not found|unavailable|unsupported|decommissioned)|unsupported.{0,30}model|permission.{0,30}model|rate.?limit|quota|overload|capacity|(?:token|context).{0,40}(?:limit|maximum|exceed|too large|capacity|length)|(?:limit|maximum|exceed).{0,40}(?:token|context)|request.{0,20}too large|econnreset|econnrefused|enotfound|eai_again|etimedout|failed to fetch|fetch failed/.test(details);
 }
 
-// Verify Groq before the UI finishes loading, using the same prompt as real requests
-async function warmup(settings = {}) {
-  const model = getModel(settings);
+// Create query and get response or error
+async function createCompletion(settings, messages) {
+  const models = getTextModels(settings);
+  let lastError;
 
-  await getClient(settings).chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: buildSystemPrompt(settings) },
-      { role: 'user', content: 'ping' },
-    ],
-    max_tokens: 1,
-  });
+  for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
+    const model = models[modelIndex];
+
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const response = await getClient(settings).chat.completions.create({
+          model,
+          messages,
+          tools: toolDefinitions,
+          temperature: 0.4,
+        });
+
+        const choice = response.choices?.[0];
+
+        if (!choice) {
+          const error = new Error(`Model "${model}" returned an empty response.`);
+          error.code = 'MODEL_EMPTY_RESPONSE';
+          throw error;
+        }
+
+        // Truncated response error
+        if (choice.finish_reason === 'length') {
+          const error = new Error(
+            `Model "${model}" reached its output token limit.`
+          );
+          error.code = 'MODEL_OUTPUT_LIMIT';
+          throw error;
+        }
+
+        return response;
+      } catch (error) {
+        // Retry on the same model first
+        if (isToolCallFailure(error) && attempt < MAX_TOOL_RETRIES) {
+          console.warn(
+            `[capri:retry] bad tool call on ${model} (${attempt + 1}/${MAX_TOOL_RETRIES})`
+          );
+          continue;
+        }
+
+        // Try the next model if needed
+        if (
+          modelIndex < models.length - 1 &&
+          shouldFallbackToNextModel(error)
+        ) {
+          const nextModel = models[modelIndex + 1];
+
+          console.warn(
+            `[capri:fallback] ${model} failed: ${error.message}. Trying ${nextModel}.`
+          );
+
+          lastError = error;
+          break;
+        }
+
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error('No text models are configured.');
+}
+
+// Verify Groq before the UI finishes loading
+async function warmup(settings = {}) {
+  // const model = getModel(settings);
+
+  // await getClient(settings).chat.completions.create({
+  //   model,
+  //   messages: [
+  //     { role: 'system', content: buildSystemPrompt(settings) },
+  //     { role: 'user', content: 'ping' },
+  //   ],
+  //   max_tokens: 1,
+  // });
 }
 
 async function transcribe(audio, settings = {}, mimeType = 'audio/webm') {
   const mediaType = mimeType.split(';', 1)[0].trim().toLowerCase();
+
   const extensions = {
     'audio/webm': 'webm',
     'audio/ogg': 'ogg',
     'audio/mp4': 'mp4',
   };
+
   const extension = extensions[mediaType];
+
   if (!extension) {
-    throw new Error(`Unsupported voice recording format: ${mediaType || 'unknown'}.`);
+    throw new Error(
+      `Unsupported voice recording format: ${mediaType || 'unknown'}.`
+    );
   }
 
-  const file = await Groq.toFile(audio, `voice.${extension}`, { type: mediaType });
-  const result = await getClient(settings).audio.transcriptions.create({
-    file,
-    model: getVoiceModel(settings),
-    language: 'en',
-    temperature: 0,
-  });
-  return (result.text || '').trim();
+  const models = getVoiceModels(settings);
+
+  for (let index = 0; index < models.length; index++) {
+    const model = models[index];
+
+    try {
+      const file = await Groq.toFile(
+        audio,
+        `voice.${extension}`,
+        { type: mediaType }
+      );
+
+      const result = await getClient(settings).audio.transcriptions.create({
+        file,
+        model,
+        language: 'en',
+        temperature: 0,
+      });
+
+      return (result.text || '').trim();
+    } catch (error) {
+      if (
+        index < models.length - 1 &&
+        shouldFallbackToNextModel(error)
+      ) {
+        console.warn(
+          `[capri:fallback] Voice model ${model} failed: ${error.message}. Trying ${models[index + 1]}.`
+        );
+
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error('All configured voice models failed.');
 }
 
 // Ask the model a question

@@ -11,16 +11,23 @@
   const groqApiKeyStatus = document.querySelector('#groq-api-key-status');
   const groqApiKeySaveButton = document.querySelector('#save-groq-api-key');
   const groqApiKeyToggle = document.querySelector('#toggle-groq-api-key');
-  const groqTextModelInput = document.querySelector('#groq-text-model');
+  const groqTextModelList = document.querySelector('#groq-text-models');
+  const groqTextModelAddButton = document.querySelector('#add-groq-text-model');
   const groqTextModelStatus = document.querySelector('#groq-text-model-status');
-  const groqVoiceModelInput = document.querySelector('#groq-voice-model');
-  const groqVoiceModelStatus = document.querySelector('#groq-voice-model-status');
+  const groqVoiceModelList = document.querySelector('#groq-voice-models');
+  const groqVoiceModelAddButton = document.querySelector('#add-groq-voice-model');
+  const groqVoiceModelStatus = document.querySelector('#groq-voice-model-status');  
   const groqTextModelSaveButton = document.querySelector('#save-groq-text-model');
   const groqVoiceModelSaveButton = document.querySelector('#save-groq-voice-model');
   const braveApiKeyInput = document.querySelector('#brave-api-key');
   const braveApiKeyStatus = document.querySelector('#brave-api-key-status');
   const braveApiKeySaveButton = document.querySelector('#save-brave-api-key');
   const braveApiKeyToggle = document.querySelector('#toggle-brave-api-key');
+  const startDirectoryLabel = document.querySelector('#start-directory');
+  const startDirectoryName = document.querySelector('#start-directory-name');
+  const startDirectoryStatus = document.querySelector('#start-directory-status');
+  const chooseStartButton = document.querySelector('#choose-start-directory');
+  const resetStartButton = document.querySelector('#reset-start-directory');
 
   if (!timeZoneSelect) return;
 
@@ -44,6 +51,109 @@
     }, 1000));
   }
 
+  function appendModelInput(container, model = '') {
+    const row = document.createElement('div');
+    const priority = document.createElement('span');
+    const input = document.createElement('input');
+    const removeButton = document.createElement('button');
+
+    row.className = 'settings-model-row';
+
+    priority.className = 'settings-model-priority';
+
+    input.className = 'settings-text-input settings-model-input';
+    input.type = 'text';
+    input.maxLength = 200;
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.placeholder = 'Enter model ID';
+    input.value = model;
+    input.dataset.modelInput = 'true';
+
+    removeButton.className = 'settings-path-remove settings-model-remove';
+    removeButton.type = 'button';
+    removeButton.textContent = 'Remove';
+    removeButton.dataset.removeModel = 'true';
+
+    row.append(priority, input, removeButton);
+    container.appendChild(row);
+  }
+
+  function updateModelEditor(container, addButton) {
+    const rows = [...container.querySelectorAll('.settings-model-row')];
+    const label = container.dataset.modelLabel || 'Model';
+
+    rows.forEach((row, index) => {
+      const priority = row.querySelector('.settings-model-priority');
+      const input = row.querySelector('[data-model-input]');
+      const removeButton = row.querySelector('[data-remove-model]');
+
+      priority.textContent = `${index + 1}.`;
+      input.setAttribute('aria-label', `${label} model ${index + 1}`);
+
+      removeButton.hidden = rows.length === 1;
+      removeButton.setAttribute(
+        'aria-label',
+        `Remove ${label.toLowerCase()} model ${index + 1}`
+      );
+    });
+
+    addButton.disabled = rows.length >= 3;
+  }
+
+  function renderModelInputs(container, models, addButton) {
+    const values = Array.isArray(models)
+      ? models
+          .filter((model) => typeof model === 'string')
+          .slice(0, 3)
+      : [];
+
+    container.replaceChildren();
+
+    for (const model of values.length ? values : ['']) {
+      appendModelInput(container, model);
+    }
+
+    updateModelEditor(container, addButton);
+  }
+
+  function getModelValues(container) {
+    return [...container.querySelectorAll('[data-model-input]')]
+      .map((input) => input.value.trim())
+      .filter(Boolean);
+  }
+
+  function addModelInput(container, addButton) {
+    const count = container.querySelectorAll('[data-model-input]').length;
+
+    if (count >= 3) return;
+
+    appendModelInput(container);
+    updateModelEditor(container, addButton);
+
+    const inputs = container.querySelectorAll('[data-model-input]');
+    inputs[inputs.length - 1].focus();
+  }
+
+  function attachModelEditor(container, addButton) {
+    addButton.addEventListener('click', () => {
+      addModelInput(container, addButton);
+    });
+
+    container.addEventListener('click', (event) => {
+      const removeButton = event.target.closest('[data-remove-model]');
+
+      if (!removeButton) return;
+
+      const rows = container.querySelectorAll('.settings-model-row');
+
+      if (rows.length <= 1) return;
+
+      removeButton.closest('.settings-model-row').remove();
+      updateModelEditor(container, addButton);
+    });
+  }
+  
   const directorySettings = [
     {
       key: 'gamePaths',
@@ -88,8 +198,8 @@
   if (requireStartInput) requireStartInput.disabled = true;
   for (const element of [
     groqApiKeyInput,
-    groqTextModelInput,
-    groqVoiceModelInput,
+    groqTextModelAddButton,
+    groqVoiceModelAddButton,
     groqApiKeySaveButton,
     groqTextModelSaveButton,
     groqVoiceModelSaveButton,
@@ -106,8 +216,10 @@
   let savedRequireStart = false;
   let savedGroqApiKey = '';
   let hasSavedBraveApiKey = false;
-  let savedGroqTextModel = '';
-  let savedGroqVoiceModel = '';
+  let savedGroqTextModels = [];
+  let savedGroqVoiceModels = [];
+  let savedStartDirectory = '';
+  let defaultStartDirectory = '';
 
   // Get the current UTC offset for a timezone.
   function getOffsetMinutes(timeZone) {
@@ -546,30 +658,67 @@
     }
   }
 
-  async function saveGroqModel(input, status, button, settingMethod, getSavedModel, setSavedModel, label) {
+  async function saveGroqModels(
+    container,
+    status,
+    button,
+    addButton,
+    settingMethod,
+    getSavedModels,
+    setSavedModels,
+    label
+  ) {
     if (!window.capriSettings?.[settingMethod]) return;
 
-    const model = input.value.trim();
-    if (model === getSavedModel()) {
+    const models = getModelValues(container);
+    const previousModels = [...getSavedModels()];
+
+    if (models.length > 3) {
+      status.textContent = 'You can configure a maximum of 3 models.';
+      return;
+    }
+
+    if (
+      models.length === previousModels.length &&
+      models.every((model, index) => model === previousModels[index])
+    ) {
       status.textContent = '';
       showSaved(button);
       return;
     }
 
     button.disabled = true;
+    addButton.disabled = true;
+
+    container.querySelectorAll('input, button').forEach((element) => {
+      element.disabled = true;
+    });
+
     try {
-      const settings = await window.capriSettings[settingMethod](model);
-      setSavedModel(settings[settingMethod === 'setGroqTextModel'
-        ? 'groqTextModel'
-        : 'groqVoiceModel']);
-      input.value = getSavedModel();
+      const settings = await window.capriSettings[settingMethod](models);
+
+      const settingKey = settingMethod === 'setGroqTextModels'
+        ? 'groqTextModels'
+        : 'groqVoiceModels';
+
+      const savedModels = Array.isArray(settings[settingKey])
+        ? settings[settingKey]
+        : models;
+
+      setSavedModels(savedModels);
+
+      renderModelInputs(container, savedModels, addButton);
+
       status.textContent = '';
       showSaved(button);
     } catch (error) {
-      input.value = getSavedModel();
-      status.textContent = `Couldn't save ${label.toLowerCase()}: ${error.message}`;
+      renderModelInputs(container, previousModels, addButton);
+
+      status.textContent =
+        `Couldn't save ${label.toLowerCase()}: ${error.message}`;
     } finally {
       button.disabled = false;
+      updateModelEditor(container, addButton);
     }
   }
 
@@ -600,7 +749,46 @@
     }
   }
 
-  // Load the saved timezone and folder settings.
+  function renderStartDirectory() {
+    if (!startDirectoryLabel || !startDirectoryName) return;
+
+    const directoryPath = savedStartDirectory || defaultStartDirectory;
+
+    startDirectoryName.textContent = directoryPath
+      ? directoryPath.split(/[\\/]/).filter(Boolean).pop() || directoryPath
+      : 'Default folder';
+
+    startDirectoryLabel.textContent =
+      directoryPath || 'Your Windows user folder';
+
+    startDirectoryLabel.title = directoryPath || 'Your Windows user folder';
+
+    chooseStartButton.disabled = false;
+    resetStartButton.disabled = !savedStartDirectory;
+  }
+
+  async function saveStartDirectory(directory) {
+    if (!window.capriSettings?.setStartDirectory) {
+      startDirectoryStatus.textContent = 'Start folder setting is unavailable.';
+      return;
+    }
+
+    chooseStartButton.disabled = true;
+    resetStartButton.disabled = true;
+
+    try {
+      const result = await window.capriSettings.setStartDirectory(directory);
+      savedStartDirectory = result.startDirectory || '';
+      startDirectoryStatus.textContent = 'Saved';
+    } catch (error) {
+      startDirectoryStatus.textContent =
+        "Couldn't save start folder: " + error.message;
+    } finally {
+      renderStartDirectory();
+    }
+  }
+
+  // Load the saved timezone and folder settings
   async function loadSettings() {
     let settings;
 
@@ -647,24 +835,60 @@
     if (braveApiKeyInput) braveApiKeyInput.disabled = false;
     if (braveApiKeySaveButton) braveApiKeySaveButton.disabled = false;
     if (braveApiKeyToggle) braveApiKeyToggle.disabled = false;
-    savedGroqTextModel = typeof settings.groqTextModel === 'string'
-      ? settings.groqTextModel
-      : typeof settings.groqModel === 'string'
-        ? settings.groqModel
+ 
+    // Load text models
+    const textModels =
+      settings.groqTextModels ??
+      settings.groqTextModel ??
+      settings.groqModel;
+
+    savedGroqTextModels = Array.isArray(textModels)
+      ? textModels
+      : typeof textModels === 'string' && textModels.trim()
+        ? [textModels.trim()]
+        : [];
+
+    renderModelInputs(
+      groqTextModelList,
+      savedGroqTextModels,
+      groqTextModelAddButton
+    );
+
+    if (groqTextModelSaveButton) {
+      groqTextModelSaveButton.disabled = false;
+    }
+
+    // Load voice models
+    const voiceModels =
+      settings.groqVoiceModels ??
+      settings.groqVoiceModel;
+
+    savedGroqVoiceModels = Array.isArray(voiceModels)
+      ? voiceModels
+      : typeof voiceModels === 'string' && voiceModels.trim()
+        ? [voiceModels.trim()]
+        : [];
+
+    renderModelInputs(
+      groqVoiceModelList,
+      savedGroqVoiceModels,
+      groqVoiceModelAddButton
+    );
+
+    if (groqVoiceModelSaveButton) {
+      groqVoiceModelSaveButton.disabled = false;
+    }
+    defaultStartDirectory =
+      typeof settings.defaultStartDirectory === 'string'
+        ? settings.defaultStartDirectory
         : '';
-    if (groqTextModelInput) {
-      groqTextModelInput.value = savedGroqTextModel;
-      groqTextModelInput.disabled = false;
-    }
-    if (groqTextModelSaveButton) groqTextModelSaveButton.disabled = false;
-    savedGroqVoiceModel = typeof settings.groqVoiceModel === 'string'
-      ? settings.groqVoiceModel
-      : '';
-    if (groqVoiceModelInput) {
-      groqVoiceModelInput.value = savedGroqVoiceModel;
-      groqVoiceModelInput.disabled = false;
-    }
-    if (groqVoiceModelSaveButton) groqVoiceModelSaveButton.disabled = false;
+
+    savedStartDirectory =
+      typeof settings.startDirectory === 'string'
+        ? settings.startDirectory
+        : '';
+
+    renderStartDirectory();
 
     try {
       const timeZone = settings.timeZone || 'Asia/Karachi';
@@ -703,32 +927,50 @@
     }
   }
 
-  // Timezone dropdown interactions.
+  // Update username on change
   userNameInput?.addEventListener('change', saveUserName);
+
+  // Update start flag on change
   requireStartInput?.addEventListener('change', saveRequireStart);
+
+  // Update API key on button press
   groqApiKeySaveButton?.addEventListener('click', () => saveGroqApiKey());
+
+  // Update voice text on button press
+  attachModelEditor(groqTextModelList, groqTextModelAddButton);  
   groqTextModelSaveButton?.addEventListener('click', () =>
-    saveGroqModel(
-      groqTextModelInput,
+    saveGroqModels(
+      groqTextModelList,
       groqTextModelStatus,
       groqTextModelSaveButton,
-      'setGroqTextModel',
-      () => savedGroqTextModel,
-      (model) => { savedGroqTextModel = model; },
-      'Text model'
+      groqTextModelAddButton,
+      'setGroqTextModels',
+      () => savedGroqTextModels,
+      (models) => {
+        savedGroqTextModels = models;
+      },
+      'Text models'
     )
   );
+
+  // Update the voice model on button press
+  attachModelEditor(groqVoiceModelList, groqVoiceModelAddButton);
   groqVoiceModelSaveButton?.addEventListener('click', () =>
-    saveGroqModel(
-      groqVoiceModelInput,
+    saveGroqModels(
+      groqVoiceModelList,
       groqVoiceModelStatus,
       groqVoiceModelSaveButton,
-      'setGroqVoiceModel',
-      () => savedGroqVoiceModel,
-      (model) => { savedGroqVoiceModel = model; },
-      'Transcription model'
+      groqVoiceModelAddButton,
+      'setGroqVoiceModels',
+      () => savedGroqVoiceModels,
+      (models) => {
+        savedGroqVoiceModels = models;
+      },
+      'Voice models'
     )
   );
+
+  // Toggle API key visibility on button press
   groqApiKeyToggle?.addEventListener('click', () => {
     const showApiKey = groqApiKeyInput.type === 'password';
     groqApiKeyInput.type = showApiKey ? 'text' : 'password';
@@ -739,7 +981,11 @@
     );
     groqApiKeyToggle.title = showApiKey ? 'Hide API key' : 'Show API key';
   });
+
+  // Update API key on button press
   braveApiKeySaveButton?.addEventListener('click', saveBraveApiKey);
+  
+  // Toggle API key visibility on button press
   braveApiKeyToggle?.addEventListener('click', () => {
     const showApiKey = braveApiKeyInput.type === 'password';
     braveApiKeyInput.type = showApiKey ? 'text' : 'password';
@@ -750,6 +996,27 @@
     );
     braveApiKeyToggle.title = showApiKey ? 'Hide API key' : 'Show API key';
   });
+
+  // Update start folder on button press
+  chooseStartButton?.addEventListener('click', async () => {
+    if (!window.capriSettings?.selectStartDirectory) return;
+
+    chooseStartButton.disabled = true;
+    try {
+      const [selected] = (await window.capriSettings.selectStartDirectory()) || [];
+      if (selected) await saveStartDirectory(selected);
+    } catch (error) {
+      startDirectoryStatus.textContent =
+        "Couldn't select start folder: " + error.message;
+    } finally {
+      renderStartDirectory();
+    }
+  });
+
+  // Reset start directory on button press
+  resetStartButton?.addEventListener('click', () => saveStartDirectory(''));
+
+  // Update user name on any keydown event
   userNameInput?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -757,11 +1024,13 @@
     }
   });
 
+  // Update timezone when dropdown changed
   timeZoneToggle.addEventListener('click', () => {
     if (timeZoneOptions.hidden) openOptions();
     else closeOptions();
   });
 
+  // Update timezone on arrow key events
   timeZoneToggle.addEventListener('keydown', (event) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
@@ -780,6 +1049,7 @@
       closeOptions();
     }
   });
+
 
   timeZoneOptions.addEventListener('click', (event) => {
     const option = event.target.closest('[role="option"]');
@@ -816,6 +1086,14 @@
     }
   });
 
+  // Close the timezone dropdown when clicking outside it
+  document.addEventListener('pointerdown', (event) => {
+    if (timeZoneWrap && !timeZoneWrap.contains(event.target)) {
+      closeOptions();
+    }
+  });
+
+  // Add directory when the button is pressed
   for (const directory of directorySettings) {
     directory.button?.addEventListener('click', () =>
       addDirectoryPaths(
@@ -825,6 +1103,8 @@
         directory.pickerPrompt
       )
     );
+
+    // Add executable when the button is pressed
     directory.executableButton?.addEventListener('click', () =>
       addDirectoryPaths(
         directory,
@@ -833,6 +1113,8 @@
         'Select executable files...'
       )
     );
+
+    // Save directory path when the button is pressed
     directory.list.addEventListener('click', (event) => {
       const button = event.target.closest('[data-directory-path]');
       if (!button) return;
@@ -843,18 +1125,13 @@
         directory.paths.filter((entry) => entry !== directoryPath)
       );
     });
+
+    // Update executable nickname when input changes
     directory.list.addEventListener('change', (event) => {
       const input = event.target.closest('[data-executable-path]');
       if (input) saveExecutableNickname(directory, input);
     });
   }
-
-  // Close the timezone dropdown when clicking outside it.
-  document.addEventListener('pointerdown', (event) => {
-    if (timeZoneWrap && !timeZoneWrap.contains(event.target)) {
-      closeOptions();
-    }
-  });
 
   loadSettings();
 })();

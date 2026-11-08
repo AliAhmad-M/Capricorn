@@ -34,6 +34,9 @@
   <main id="app" class="app">
     <!-- Portrait panel -->
     <section class="side">
+      <div id="drag-speech" class="drag-speech" role="status" aria-live="polite" hidden>
+        <span id="drag-speech-text"></span>
+      </div>
       <div class="portrait-wrap">
         <div class="frame">
           <div class="frame-inner portrait">
@@ -57,8 +60,8 @@
           <div class="panel-bar">
             <span class="panel-title">CAPRICORN</span>
             <div class="panel-actions">
-              <button id="dock" class="dock" type="button"></button>
-              <button id="settings" class="dock settings-button" type="button" aria-label="Settings" title="Settings">
+              <button id="dock" class="small-button" type="button"></button>
+              <button id="settings" class="small-button settings-button" type="button" aria-label="Settings" title="Settings">
                 <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                   <circle cx="12" cy="12" r="3"/>
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33h-.08a1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51h-.08a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82v-.08a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1v-.08a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.08a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.08a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.08a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -103,7 +106,7 @@
               Configure Capri's API, behavior, and tool-related settings.
             </p>
           </div>
-          <button id="settings-back" class="dock" type="button">Back to Capricorn</button>
+          <button id="settings-back" class="small-button" type="button">Back to Capricorn</button>
         </header>
         <section class="settings-user">
           <div class="settings-section-heading">
@@ -162,30 +165,91 @@
             </button>
           </div>
           <p id="groq-api-key-status" class="settings-status" role="status" aria-live="polite"></p>
-          <div class="settings-input-save-row">
-            <label class="settings-field" for="groq-text-model">
-              <span class="settings-field-label">Text model</span>
-              <input id="groq-text-model" class="settings-text-input" type="text"
-                     name="groq-text-model" autocomplete="off" maxlength="200" placeholder="Enter model">
-            </label>
-            <button id="save-groq-text-model" class="settings-add-path settings-save-button"
-                    type="button" disabled>
-              Save model
+          <div class="settings-model-settings">
+            <div class="settings-field">
+              <span class="settings-field-label">
+                Text models
+                <span class="settings-optional">(Priority order, maximum 3)</span>
+              </span>
+
+              <div
+                id="groq-text-models"
+                class="settings-model-list"
+                data-model-label="Text"
+                aria-label="Text models"
+              ></div>
+
+              <button
+                id="add-groq-text-model"
+                class="settings-add-path settings-add-path-secondary settings-model-add"
+                type="button"
+                disabled
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <span>Add model</span>
+              </button>
+            </div>
+
+            <button
+              id="save-groq-text-model"
+              class="settings-add-path settings-save-button"
+              type="button"
+              disabled
+            >
+              Save models
             </button>
           </div>
-          <p id="groq-text-model-status" class="settings-status" role="status" aria-live="polite"></p>
-          <div class="settings-input-save-row">
-            <label class="settings-field" for="groq-voice-model">
-              <span class="settings-field-label">Voice model</span>
-              <input id="groq-voice-model" class="settings-text-input" type="text"
-                     name="groq-voice-model" autocomplete="off" maxlength="200">
-            </label>
-            <button id="save-groq-voice-model" class="settings-add-path settings-save-button"
-                    type="button" disabled>
-              Save model
+
+          <p
+            id="groq-text-model-status"
+            class="settings-status"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <div class="settings-model-settings">
+            <div class="settings-field">
+              <span class="settings-field-label">
+                Voice models
+                <span class="settings-optional">(Priority order, maximum 3)</span>
+              </span>
+
+              <div
+                id="groq-voice-models"
+                class="settings-model-list"
+                data-model-label="Voice"
+                aria-label="Voice models"
+              ></div>
+
+              <button
+                id="add-groq-voice-model"
+                class="settings-add-path settings-add-path-secondary settings-model-add"
+                type="button"
+                disabled
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <span>Add model</span>
+              </button>
+            </div>
+
+            <button
+              id="save-groq-voice-model"
+              class="settings-add-path settings-save-button"
+              type="button"
+              disabled
+            >
+              Save models
             </button>
           </div>
-          <p id="groq-voice-model-status" class="settings-status" role="status" aria-live="polite"></p>
+          <p
+            id="groq-voice-model-status"
+            class="settings-status"
+            role="status"
+            aria-live="polite"
+          ></p>
           <div class="settings-input-save-row">
             <label class="settings-field" for="brave-api-key">
               <span class="settings-field-label">Brave API key <span class="settings-optional">(Optional)</span></span>
@@ -209,8 +273,8 @@
           </div>
           <p id="brave-api-key-status" class="settings-status" role="status" aria-live="polite"></p>
         </section>
-        <section class="settings-game-paths">
-          <div class="settings-game-paths-header">
+        <section class="settings-path">
+          <div class="settings-path-header">
             <div class="settings-section-heading">
               <h2 class="settings-section-title">Video Games</h2>
               <p class="settings-section-description">
@@ -255,8 +319,8 @@
             aria-live="polite"
           ></p>
         </section>
-        <section class="settings-game-paths">
-          <div class="settings-game-paths-header">
+        <section class="settings-path">
+          <div class="settings-path-header">
             <div class="settings-section-heading">
               <h2 class="settings-section-title">Softwares</h2>
               <p class="settings-section-description">
@@ -296,6 +360,66 @@
 
           <p
             id="software-paths-status"
+            class="settings-status"
+            role="status"
+            aria-live="polite"
+          ></p>
+        </section>
+        <section class="settings-path">
+          <div class="settings-path-header">
+            <div class="settings-section-heading">
+              <h2 class="settings-section-title">Capri folder</h2>
+              <p class="settings-section-description">
+                Choose the default folder Capri's file tools start in.
+                Defaults to your Windows user folder.
+              </p>
+            </div>
+
+            <div class="settings-path-actions">
+              <button
+                id="choose-start-directory"
+                class="settings-add-path"
+                type="button"
+                disabled
+              >
+                Edit folder
+              </button>
+
+              <button
+                id="reset-start-directory"
+                class="settings-add-path settings-add-path-secondary"
+                type="button"
+                disabled
+              >
+                Use default
+              </button>
+            </div>
+          </div>
+          <ul
+            id="start-directory-list"
+            class="settings-path-list"
+            aria-label="Current Capri folder"
+          >
+            <li id="start-directory-item" class="settings-path-item">
+              <svg
+                class="settings-folder-icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path d="M3.5 6.5h6l2 2H20a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10a1 1 0 0 1 .5-1Z"/>
+              </svg>
+
+              <div class="settings-path-details">
+                <strong id="start-directory-name" class="settings-path-name">
+                  Capri Root Folder
+                </strong>
+                <span id="start-directory" class="settings-path-label"></span>
+              </div>
+            </li>
+          </ul>
+
+          <p
+            id="start-directory-status"
             class="settings-status"
             role="status"
             aria-live="polite"
