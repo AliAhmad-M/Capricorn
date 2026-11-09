@@ -696,7 +696,7 @@
     }
   }
 
-  // Store the Fish Audio API key and clear the warmup cache
+  // Persist the key before marking it as saved in the UI.
   async function saveFishApiKey() {
     if (!window.capriSettings?.setFishApiKey) {
       fishApiKeyStatus.textContent = 'Fish Audio settings are unavailable.';
@@ -713,6 +713,7 @@
     fishSaveApiKeyButton.disabled = true;
 
     try {
+      await window.capriSettings.setFishApiKey(apiKey);
       savedFishApiKey = apiKey;
       fishApiKeyInput.value = savedFishApiKey;
 
