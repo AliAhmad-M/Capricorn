@@ -471,7 +471,7 @@ async function createCompletion(settings, messages, onText = () => {}) {
 
 // Verify Groq before the UI finishes loading
 async function warmup(settings = {}) {
-  const model = getModel(settings);
+  const model = getTextModels(settings)[0];
 
   await getClient(settings).chat.completions.create({
     model,
