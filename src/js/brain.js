@@ -471,16 +471,16 @@ async function createCompletion(settings, messages, onText = () => {}) {
 
 // Verify Groq before the UI finishes loading
 async function warmup(settings = {}) {
-  // const model = getModel(settings);
+  const model = getModel(settings);
 
-  // await getClient(settings).chat.completions.create({
-  //   model,
-  //   messages: [
-  //     { role: 'system', content: buildSystemPrompt(settings) },
-  //     { role: 'user', content: 'ping' },
-  //   ],
-  //   max_tokens: 1,
-  // });
+  await getClient(settings).chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: buildSystemPrompt(settings) },
+      { role: 'user', content: 'ping' },
+    ],
+    max_tokens: 1,
+  });
 }
 
 // Convert the assistant's answer into audio bytes
