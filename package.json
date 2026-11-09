@@ -1,6 +1,6 @@
 {
   "name": "capricorn",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "author": "Ali Ahmad",
   "description": "A desktop assistant.",
   "main": "src/js/main.js",
