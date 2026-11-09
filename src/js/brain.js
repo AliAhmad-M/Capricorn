@@ -1,12 +1,27 @@
 const Groq = require('groq-sdk');
+const WebSocket = require('ws');
+const { encode, decode } = require('@msgpack/msgpack');
 const { toolDefinitions, executeToolCall } = require('./tools');
 const { CAPRI_SYSTEM_PROMPT } = require('./prompt');
 
+// Default model choices
 const DEFAULT_TEXT_MODELS = ['qwen/qwen3.8-27b', ];
 const DEFAULT_VOICE_MODELS = ['whisper-large-v3-turbo'];
+const DEFAULT_TTS_MODEL = 's2.1-pro-free';
+const DEFAULT_TTS_VOICE = 'fdef76c9b2e741119d817754bd8b5dd0';
+
+// TTS model properties
+const FISH_WS_URL = 'wss://api.fish.audio/v1/tts/live';
+const TTS_SAMPLE_RATE = 44100;
+
+// Tool usage properties
 const MAX_TOOL_ROUNDS = 8;
 const MAX_TOOL_RETRIES = 3;
+
+// Conversation history size
 const MAX_HISTORY = 10;
+
+// Text shown on tool usage
 const TOOL_ACTIVITY_LABELS = {
   fetch_url: 'Reading webpage...',
   web_search: 'Searching the web...',
@@ -33,9 +48,9 @@ const TOOL_ACTIVITY_LABELS = {
 
 const TOOL_NAMES = toolDefinitions.map((tool) => tool.function.name);
 
+// Get Groq client using the API key
 let client;
 let clientApiKey;
-
 function getClient(settings = {}) {
   const apiKey = settings.groqApiKey || process.env.GROQ_API_KEY;
 
@@ -51,6 +66,7 @@ function getClient(settings = {}) {
   return client;
 }
 
+// Return set of models from the input
 function normalizeModelList(models) {
   const entries = Array.isArray(models)
     ? models
@@ -66,11 +82,11 @@ function normalizeModelList(models) {
   )];
 }
 
+// Return Groq text models
 function getTextModels(settings = {}) {
   const configured = normalizeModelList(settings.groqTextModels);
   if (configured.length) return configured;
 
-  // Support older single-model settings.
   const legacy = normalizeModelList(
     settings.groqTextModel || settings.groqModel
   );
@@ -84,11 +100,11 @@ function getTextModels(settings = {}) {
   return envModels.length ? envModels : [...DEFAULT_TEXT_MODELS];
 }
 
+// Return Groq voice models
 function getVoiceModels(settings = {}) {
   const configured = normalizeModelList(settings.groqVoiceModels);
   if (configured.length) return configured;
 
-  // Support older single-model settings.
   const legacy = normalizeModelList(settings.groqVoiceModel);
   if (legacy.length) return legacy;
 
@@ -100,14 +116,23 @@ function getVoiceModels(settings = {}) {
   return envModels.length ? envModels : [...DEFAULT_VOICE_MODELS];
 }
 
-function getModel(settings = {}) {
-  return getTextModels(settings)[0];
+// Return Fish Audio tts models
+function getTtsModels(settings = {}) {
+  const configured = normalizeModelList(settings.fishTtsModels);
+  if (configured.length) return configured;
+
+  const legacy = normalizeModelList(settings.fishModel);
+  if (legacy.length) return legacy;
+
+  const envModels = normalizeModelList([
+    ...normalizeModelList(process.env.FISH_AUDIO_TTS_MODELS),
+    ...normalizeModelList(process.env.FISH_AUDIO_TTS_MODEL),
+  ]);
+
+  return envModels.length ? envModels : [DEFAULT_TTS_MODEL];
 }
 
-function getVoiceModel(settings = {}) {
-  return getVoiceModels(settings)[0];
-}
-
+// Simplify common error messages
 function getFriendlyErrorMessage(error) {
   const message = typeof error === 'string'
     ? error
@@ -157,6 +182,7 @@ function getFriendlyErrorMessage(error) {
   return "Ugh, something went sideways on my end. Give it another shot, choom.";
 }
 
+// Get AI related settings
 function getConfiguration(settings = {}) {
   const groqTextModels = getTextModels(settings);
   const groqVoiceModels = getVoiceModels(settings);
@@ -167,10 +193,11 @@ function getConfiguration(settings = {}) {
     groqTextModels,
     groqVoiceModel: groqVoiceModels[0],
     groqVoiceModels,
+    fishTtsModels: getTtsModels(settings),
   };
 }
 
-// Persona prompt, exact tool names, and the user profile
+// Construct the system prompt for the model
 function buildSystemPrompt(settings = {}) {
   const userName = typeof settings.userName === 'string' ? settings.userName.trim() : '';
 
@@ -186,11 +213,85 @@ function buildSystemPrompt(settings = {}) {
   return prompt;
 }
 
+
+// Length of the longest ending of `text` that could be the start of `tag`
+function partialTagLength(text, tag) {
+  const max = Math.min(text.length, tag.length - 1);
+  for (let length = max; length > 0; length--) {
+    if (tag.startsWith(text.slice(-length))) return length;
+  }
+  return 0;
+}
+
+// Model reasoning tags to ignore
+const THINK_OPEN = '<think>';
+const THINK_CLOSE = '</think>';
+
+// Cleans streamed text
+class StreamCleaner {
+  constructor() {
+    this.buffer = '';
+    this.inThink = false;
+    this.started = false;
+  }
+
+  push(chunk) {
+    this.buffer += chunk;
+    let out = '';
+
+    while (this.buffer) {
+      if (this.inThink) {
+        const end = this.buffer.indexOf(THINK_CLOSE);
+        if (end === -1) {
+          const keep = partialTagLength(this.buffer, THINK_CLOSE);
+          this.buffer = this.buffer.slice(this.buffer.length - keep);
+          break;
+        }
+        this.buffer = this.buffer.slice(end + THINK_CLOSE.length);
+        this.inThink = false;
+        continue;
+      }
+
+      const start = this.buffer.indexOf(THINK_OPEN);
+      if (start !== -1) {
+        out += this.clean(this.buffer.slice(0, start));
+        this.buffer = this.buffer.slice(start + THINK_OPEN.length);
+        this.inThink = true;
+        continue;
+      }
+
+      // Hold back a partial tag and trailing spaces
+      let safe = this.buffer.length - partialTagLength(this.buffer, THINK_OPEN);
+      while (safe > 0 && /[\s—–]/.test(this.buffer[safe - 1])) safe--;
+      out += this.clean(this.buffer.slice(0, safe));
+      this.buffer = this.buffer.slice(safe);
+      break;
+    }
+
+    return out;
+  }
+
+  flush() {
+    const rest = this.inThink ? '' : this.buffer;
+    this.buffer = '';
+    return this.clean(rest).trimEnd();
+  }
+
+  clean(text) {
+    let result = text.replace(/\s*[—–]\s*/g, ', ');
+    if (!this.started) {
+      result = result.trimStart();
+      if (result) this.started = true;
+    }
+    return result;
+  }
+}
+
 // Remove reasoning that some models return inline in content
 function stripReasoning(text) {
   if (typeof text !== 'string') return text;
-  const end = text.lastIndexOf('</think>');
-  const answer = end === -1 ? text : text.slice(end + '</think>'.length);
+  const end = text.lastIndexOf(THINK_CLOSE);
+  const answer = end === -1 ? text : text.slice(end + THINK_CLOSE.length);
   return answer.replace(/<think>[\s\S]*$/i, '').trim();
 }
 
@@ -201,7 +302,7 @@ function trimHistory(conversation) {
   return firstUser === -1 ? [] : history.slice(firstUser);
 }
 
-// Groq rejects the request when the model names a tool that isn't in `tools`
+// Check if there was an error when calling tools
 function isToolCallFailure(error) {
   return (
     error?.status === 400 &&
@@ -209,6 +310,7 @@ function isToolCallFailure(error) {
   );
 }
 
+// Decide when to fallback to the next model
 function shouldFallbackToNextModel(error) {
   if (
     error?.code === 'MODEL_OUTPUT_LIMIT' ||
@@ -239,12 +341,94 @@ function shouldFallbackToNextModel(error) {
     return true;
   }
 
-  // Handle token limits, context limits, unavailable models and network errors
   return /model.{0,50}(not found|unavailable|unsupported|decommissioned)|unsupported.{0,30}model|permission.{0,30}model|rate.?limit|quota|overload|capacity|(?:token|context).{0,40}(?:limit|maximum|exceed|too large|capacity|length)|(?:limit|maximum|exceed).{0,40}(?:token|context)|request.{0,20}too large|econnreset|econnrefused|enotfound|eai_again|etimedout|failed to fetch|fetch failed/.test(details);
 }
 
-// Create query and get response or error
-async function createCompletion(settings, messages) {
+// Stream the model completion response
+async function streamCompletion(settings, model, messages, onText) {
+  const cleaner = new StreamCleaner();
+  const toolCalls = [];
+  let content = '';
+  let finishReason = null;
+  let received = false;
+  let emitted = false;
+
+  const emit = (text) => {
+    if (!text) return;
+    emitted = true;
+    onText(text);
+  };
+
+  try {
+    const stream = await getClient(settings).chat.completions.create({
+      model,
+      messages,
+      tools: toolDefinitions,
+      temperature: 0.4,
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const choice = chunk.choices?.[0];
+      if (!choice) continue;
+      received = true;
+
+      const delta = choice.delta || {};
+
+      if (typeof delta.content === 'string' && delta.content) {
+        content += delta.content;
+        emit(cleaner.push(delta.content));
+      }
+
+      // Tool calls arrive in pieces, so assemble them by index
+      for (const part of delta.tool_calls || []) {
+        const index = part.index ?? 0;
+        const call = (toolCalls[index] ||= {
+          id: '',
+          type: 'function',
+          function: { name: '', arguments: '' },
+        });
+        if (part.id) call.id = part.id;
+        if (part.function?.name) call.function.name += part.function.name;
+        if (part.function?.arguments) call.function.arguments += part.function.arguments;
+      }
+
+      if (choice.finish_reason) finishReason = choice.finish_reason;
+    }
+
+    emit(cleaner.flush());
+
+    if (!received) {
+      const error = new Error(`Model "${model}" returned an empty response.`);
+      error.code = 'MODEL_EMPTY_RESPONSE';
+      throw error;
+    }
+
+    // Throw error in case of truncated tool calls or replies
+    const calls = toolCalls.filter(Boolean);
+    console.log('[capri:round]', JSON.stringify({
+      model,
+      content,
+      tools: calls.map((call) => call.function.name),
+      finishReason,
+    }));
+    if (finishReason === 'length' && (calls.length || !emitted)) {
+      const error = new Error(`Model "${model}" reached its output token limit.`);
+      error.code = 'MODEL_OUTPUT_LIMIT';
+      throw error;
+    }
+
+    const message = { role: 'assistant', content };
+    if (calls.length) message.tool_calls = calls;
+    return message;
+  } catch (error) {
+    error.partialEmitted = emitted;
+    throw error;
+  }
+}
+
+// Create a response from text models
+async function createCompletion(settings, messages, onText = () => {}) {
   const models = getTextModels(settings);
   let lastError;
 
@@ -253,51 +437,26 @@ async function createCompletion(settings, messages) {
 
     for (let attempt = 0; ; attempt++) {
       try {
-        const response = await getClient(settings).chat.completions.create({
-          model,
-          messages,
-          tools: toolDefinitions,
-          temperature: 0.4,
-        });
-
-        const choice = response.choices?.[0];
-
-        if (!choice) {
-          const error = new Error(`Model "${model}" returned an empty response.`);
-          error.code = 'MODEL_EMPTY_RESPONSE';
-          throw error;
-        }
-
-        // Truncated response error
-        if (choice.finish_reason === 'length') {
-          const error = new Error(
-            `Model "${model}" reached its output token limit.`
-          );
-          error.code = 'MODEL_OUTPUT_LIMIT';
-          throw error;
-        }
-
-        return response;
+        return await streamCompletion(settings, model, messages, onText);
       } catch (error) {
-        // Retry on the same model first
-        if (isToolCallFailure(error) && attempt < MAX_TOOL_RETRIES) {
+        // Once text has been shown or spoken, retrying would repeat it
+        const canRetry = !error.partialEmitted;
+
+        if (canRetry && isToolCallFailure(error) && attempt < MAX_TOOL_RETRIES) {
           console.warn(
             `[capri:retry] bad tool call on ${model} (${attempt + 1}/${MAX_TOOL_RETRIES})`
           );
           continue;
         }
 
-        // Try the next model if needed
         if (
+          canRetry &&
           modelIndex < models.length - 1 &&
           shouldFallbackToNextModel(error)
         ) {
-          const nextModel = models[modelIndex + 1];
-
           console.warn(
-            `[capri:fallback] ${model} failed: ${error.message}. Trying ${nextModel}.`
+            `[capri:fallback] ${model} failed: ${error.message}. Trying ${models[modelIndex + 1]}.`
           );
-
           lastError = error;
           break;
         }
@@ -312,18 +471,225 @@ async function createCompletion(settings, messages) {
 
 // Verify Groq before the UI finishes loading
 async function warmup(settings = {}) {
-  const model = getModel(settings);
+  // const model = getModel(settings);
 
-  await getClient(settings).chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: buildSystemPrompt(settings) },
-      { role: 'user', content: 'ping' },
-    ],
-    max_tokens: 1,
-  });
+  // await getClient(settings).chat.completions.create({
+  //   model,
+  //   messages: [
+  //     { role: 'system', content: buildSystemPrompt(settings) },
+  //     { role: 'user', content: 'ping' },
+  //   ],
+  //   max_tokens: 1,
+  // });
 }
 
+// Convert the assistant's answer into audio bytes
+async function textToSpeech(text, settings = {}) {
+  const apiKey =
+    settings.fishApiKey ||
+    process.env.FISH_AUDIO_API_KEY;
+
+  const voiceId =
+    settings.fishVoiceId ||
+    process.env.FISH_AUDIO_VOICE_ID?.trim() ||
+    DEFAULT_TTS_VOICE;
+
+  if (!apiKey) {
+    throw new Error('Set a Fish Audio API key in Settings or .env.');
+  }
+
+  if (!voiceId) {
+    throw new Error('Set a Fish Audio voice ID in Settings or .env.');
+  }
+
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new Error('No text provided for speech synthesis.');
+  }
+
+  const models = getTtsModels(settings);
+  let lastError;
+
+  for (let index = 0; index < models.length; index++) {
+    const model = models[index];
+
+    try {
+      const response = await fetch('https://api.fish.audio/v1/tts', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          model,
+        },
+        body: JSON.stringify({
+          text: text.trim(),
+          reference_id: voiceId,
+          format: 'mp3',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Fish Audio error: ${response.status} - ${await response.text()}`
+        );
+      }
+
+      return Buffer.from(await response.arrayBuffer());
+    } catch (error) {
+      lastError = error;
+
+      if (index < models.length - 1) {
+        console.warn(
+          `[capri:fallback] TTS model ${model} failed: ${error.message}. Trying ${models[index + 1]}.`
+        );
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+// Create web socket session and stream audio
+function textToSpeechStream(settings = {}, { onAudio = () => {}, onError = () => {} } = {}) {
+  const apiKey = settings.fishApiKey || process.env.FISH_AUDIO_API_KEY;
+  const voiceId =
+    settings.fishVoiceId ||
+    process.env.FISH_AUDIO_VOICE_ID?.trim() ||
+    DEFAULT_TTS_VOICE;
+  const models = getTtsModels(settings);
+
+  if (!apiKey) {
+    throw new Error('Set a Fish Audio API key in Settings or .env.');
+  }
+
+  // Everything sent so far
+  const textChunks = [];
+  let stopRequested = false;
+  let audioReceived = false;
+  let finished = false;
+  let current = null;
+  let resolveDone;
+  const done = new Promise((resolve) => { resolveDone = resolve; });
+
+  const finish = () => {
+    finished = true;
+    resolveDone();
+  };
+
+  // Queue frames until the socket is open
+  const send = (attempt, frame) => {
+    const data = encode(frame);
+    if (attempt.isOpen) attempt.socket.send(data);
+    else attempt.pending.push(data);
+  };
+
+  const connect = (index) => {
+    const model = models[index];
+    const socket = new WebSocket(FISH_WS_URL, {
+      headers: { Authorization: `Bearer ${apiKey}`, model },
+    });
+    const attempt = {
+      socket,
+      isOpen: false,
+      pending: [],
+      failed: false,
+      gotFinish: false,
+    };
+    current = attempt;
+
+    // Only fall back if error before audio has started
+    const fail = (error) => {
+      if (finished || attempt.failed || current !== attempt) return;
+      attempt.failed = true;
+      socket.terminate();
+
+      if (!audioReceived && index < models.length - 1) {
+        console.warn(
+          `[capri:fallback] TTS model ${model} failed: ${error.message}. Trying ${models[index + 1]}.`
+        );
+        connect(index + 1);
+        return;
+      }
+
+      onError(error);
+      finish();
+    };
+
+    socket.on('open', () => {
+      attempt.isOpen = true;
+      for (const data of attempt.pending.splice(0)) socket.send(data);
+    });
+
+    socket.on('message', (raw) => {
+      if (current !== attempt || attempt.failed) return;
+
+      let frame;
+      try {
+        frame = decode(raw);
+      } catch {
+        return;
+      }
+
+      if (frame.event === 'audio') {
+        if (frame.audio?.length) {
+          audioReceived = true;
+          onAudio(frame.audio.slice());
+        }
+      } else if (frame.event === 'error') {
+        fail(new Error(`Fish Audio error: ${frame.error}`));
+      } else if (frame.event === 'finish') {
+        attempt.gotFinish = true;
+        socket.close();
+      }
+    });
+
+    socket.on('error', fail);
+
+    socket.on('close', () => {
+      if (current !== attempt || attempt.failed || finished) return;
+
+      if (attempt.gotFinish || audioReceived) finish();
+      else fail(new Error('Fish Audio closed the connection before sending audio.'));
+    });
+
+    send(attempt, {
+      event: 'start',
+      request: {
+        text: '',
+        format: 'pcm',
+        sample_rate: TTS_SAMPLE_RATE,
+        latency: 'balanced',
+        reference_id: voiceId,
+      },
+    });
+
+    for (const text of textChunks) send(attempt, { event: 'text', text });
+    if (stopRequested) send(attempt, { event: 'stop' });
+  };
+
+  connect(0);
+
+  return {
+    push(text) {
+      if (!text || finished) return;
+      textChunks.push(text);
+      send(current, { event: 'text', text });
+    },
+    // No more text
+    end() {
+      if (finished) return;
+      stopRequested = true;
+      send(current, { event: 'stop' });
+    },
+    cancel() {
+      finished = true;
+      current?.socket.terminate();
+      resolveDone();
+    },
+    done,
+  };
+}
+
+// Convert user voice request into text
 async function transcribe(audio, settings = {}, mimeType = 'audio/webm') {
   const mediaType = mimeType.split(';', 1)[0].trim().toLowerCase();
 
@@ -380,8 +746,8 @@ async function transcribe(audio, settings = {}, mimeType = 'audio/webm') {
   throw new Error('All configured voice models failed.');
 }
 
-// Ask the model a question
-async function ask(query, conversation = [], settings = {}, onToolUsage = () => {}) {
+// Send a prompt to the model
+async function ask(query, conversation = [], settings = {}, onToolUsage = () => {}, onText = () => {}) {
   const messages = [
     { role: 'system', content: buildSystemPrompt(settings) },
     ...trimHistory(conversation),
@@ -391,10 +757,10 @@ async function ask(query, conversation = [], settings = {}, onToolUsage = () => 
   let round = 0;
 
   while (round < MAX_TOOL_ROUNDS) {
-    const response = await createCompletion(settings, messages);
-    const msg = response.choices[0].message;
+    const msg = await createCompletion(settings, messages, onText);
 
-    // Keep any inline reasoning out of the reply
+    // Clean the text and add the new message
+    msg.content = msg.content.replace(/\s*[—–]\s*/g, ', ');
     msg.content = stripReasoning(msg.content);
     messages.push(msg);
 
@@ -448,4 +814,7 @@ module.exports = {
   getConfiguration,
   getFriendlyErrorMessage,
   transcribe,
+  textToSpeech,
+  textToSpeechStream,
+  TTS_SAMPLE_RATE,
 };

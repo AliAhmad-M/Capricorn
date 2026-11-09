@@ -16,6 +16,7 @@ const brain = require('./brain');
 
 app.setAppUserModelId('com.ali.capricorn');
 
+// Window sizing and app-level tuning
 const PORTRAIT_SIZE = { width: 200, height: 200 };
 const BUBBLE_ROOM = 110;
 const PORTRAIT_WINDOW = {
@@ -34,7 +35,6 @@ const webPreferences = {
   contextIsolation: true,
   nodeIntegration: false,
   sandbox: false,
-  // Hidden windows keep their timers, so a reply keeps typing out after a view switch
   backgroundThrottling: false,
 };
 
@@ -43,9 +43,11 @@ let portraitWin = null;
 let chatWin = null;
 let settingsOpenedFromPortrait = false;
 
-// Conversation lives here so every window shares it
+// Conversation data
 let history = [];
 let transcript = [];
+
+// Global app settings
 let appSettings = {
   timeZone: 'Asia/Karachi',
   gamePaths: [],
@@ -55,12 +57,18 @@ let appSettings = {
   userName: '',
   startDirectory: '',
   requireStart: false,
+  startInMini: false,
   groqApiKey: '',
   braveApiKey: '',
+  fishApiKey: '',
+  fishVoiceId: '',
+  fishTtsModels: [],
   groqTextModels: [],
   groqVoiceModels: [],
+  speechEnabled: true,
 };
 
+// Normalize saved model lists
 function normalizeModelList(models) {
   const entries = Array.isArray(models)
     ? models
@@ -76,6 +84,7 @@ function normalizeModelList(models) {
   )].slice(0, 3);
 }
 
+// Normalize Groq text and voice models
 function normalizeGroqSettings(settings) {
   return {
     groqApiKey: typeof settings.groqApiKey === 'string'
@@ -95,10 +104,12 @@ function normalizeGroqSettings(settings) {
   };
 }
 
+// Normalize the username
 function normalizeUserName(userName) {
   return typeof userName === 'string' ? userName.trim().slice(0, 60) : '';
 }
 
+// Normalize nicknames for executable apps
 function normalizeExecutableNicknames(nicknames) {
   if (!nicknames || typeof nicknames !== 'object' || Array.isArray(nicknames)) {
     return {};
@@ -117,6 +128,7 @@ function normalizeExecutableNicknames(nicknames) {
   );
 }
 
+// Check for valid timezone
 function isValidTimeZone(timeZone) {
   if (typeof timeZone !== 'string') return false;
   try {
@@ -127,21 +139,21 @@ function isValidTimeZone(timeZone) {
   }
 }
 
-// Use the project settings file in development and a writable per-user file
-// in packaged builds, where the application directory may be read-only.
+// Return path to settings.json
 function settingsFile() {
   return app.isPackaged
     ? path.join(app.getPath('userData'), 'settings.json')
     : path.join(__dirname, '../../settings.json');
 }
 
-// Fall back to the other location once to migrate existing settings.
+// Legacy settings.json path
 function legacySettingsFile() {
   return app.isPackaged
     ? path.join(__dirname, '../../settings.json')
     : path.join(app.getPath('userData'), 'settings.json');
 }
 
+// Write data to the settings file
 async function writeSettings(settings) {
   const file = settingsFile();
   await fs.mkdir(path.dirname(file), { recursive: true });
@@ -150,6 +162,7 @@ async function writeSettings(settings) {
   await fs.rename(temporaryFile, file);
 }
 
+// Read the settings json if it exists
 async function readJsonIfExists(file) {
   try {
     return JSON.parse(await fs.readFile(file, 'utf8'));
@@ -159,6 +172,7 @@ async function readJsonIfExists(file) {
   }
 }
 
+// Load settings and migrate older values
 async function loadSettings() {
   let saved = await readJsonIfExists(settingsFile());
   let migrated = false;
@@ -167,36 +181,60 @@ async function loadSettings() {
     saved = await readJsonIfExists(legacySettingsFile());
     migrated = Boolean(saved);
   }
-  // First run: defaults apply, the file is created on the first save
+  
+  // First run
   if (!saved) return;
 
   if (!isValidTimeZone(saved.timeZone)) {
     throw new Error('Saved settings contain an invalid time zone.');
   }
 
+  // Load all settings
   appSettings = {
     ...appSettings,
     ...saved,
+    
     gamePaths: Array.isArray(saved.gamePaths)
       ? saved.gamePaths.filter((folder) => typeof folder === 'string')
       : [],
+    
     softwarePaths: Array.isArray(saved.softwarePaths)
       ? saved.softwarePaths.filter((folder) => typeof folder === 'string')
       : [],
+    
     gameExecutableNicknames: normalizeExecutableNicknames(
       saved.gameExecutableNicknames
     ),
+    
     softwareExecutableNicknames: normalizeExecutableNicknames(
       saved.softwareExecutableNicknames
     ),
+    
     userName: normalizeUserName(saved.userName),
+    
     startDirectory: typeof saved.startDirectory === 'string'
       ? saved.startDirectory.trim()
       : '',
+    
     requireStart: saved.requireStart === true,
+    startInMini: saved.startInMini === true,
+    
+    speechEnabled: saved.speechEnabled !== false,
+    
     braveApiKey: typeof saved.braveApiKey === 'string'
       ? saved.braveApiKey.trim()
       : '',
+    
+    fishApiKey: typeof saved.fishApiKey === 'string'
+      ? saved.fishApiKey.trim()
+      : '',
+
+    fishVoiceId: typeof saved.fishVoiceId === 'string'
+      ? saved.fishVoiceId.trim()
+      : '',
+
+    fishTtsModels: normalizeModelList(saved.fishTtsModels),
+
     ...normalizeGroqSettings(saved),
   };
   delete appSettings.groqModel;
@@ -206,6 +244,7 @@ async function loadSettings() {
   if (migrated) await writeSettings(appSettings);
 }
 
+// Application full window 
 function createFullWindow() {
   fullWin = new BrowserWindow({
     width: 1040,
@@ -219,8 +258,6 @@ function createFullWindow() {
     webPreferences,
   });
   fullWin.loadFile(page, { query: { view: 'full' } });
-
-  // Hidden overlay windows would keep the process alive, so quit explicitly
   fullWin.on('closed', () => app.quit());
 }
 
@@ -264,12 +301,14 @@ function placeChat(portrait) {
     below: area.y + area.height - (portrait.y + portrait.height),
     above: portrait.y - area.y,
   };
+
   const need = {
     right: cw + CHAT_GAP,
     left: cw + CHAT_GAP,
     below: ch + CHAT_GAP,
     above: ch + CHAT_GAP,
   };
+  
   const order = ['right', 'left', 'below', 'above'];
   const side =
     order.find((s) => space[s] >= need[s]) ??
@@ -298,11 +337,13 @@ function placeChat(portrait) {
   };
 }
 
+// Return position and size of portrait rect
 function portraitRect() {
   const b = portraitWin.getBounds();
   return { x: b.x, y: b.y + BUBBLE_ROOM, width: b.width, height: b.height - BUBBLE_ROOM };
 }
 
+// Open chat in mini view
 function openChat() {
   if (!portraitWin.isVisible()) return;
   const { x, y } = placeChat(portraitRect());
@@ -312,10 +353,12 @@ function openChat() {
   chatWin.webContents.send('capri:focus');
 }
 
+// Close chat in mini view
 function closeChat() {
   chatWin.hide();
 }
 
+// Change to full view
 function showFull() {
   closeChat();
   portraitWin.hide();
@@ -324,17 +367,20 @@ function showFull() {
   fullWin.focus();
 }
 
+// Change to mini view
 function showPortrait() {
   closeChat();
   fullWin.hide();
   portraitWin.show();
 }
 
+// Toggle between views
 function toggleView() {
   if (fullWin.isVisible() && !fullWin.isMinimized()) showPortrait();
   else showFull();
 }
 
+// Open settings in mini view
 function openSettingsFromPortrait() {
   settingsOpenedFromPortrait = true;
   closeChat();
@@ -344,15 +390,15 @@ function openSettingsFromPortrait() {
   fullWin.webContents.send('capri:settings-open');
 }
 
+// Close the settings page
 function closeSettings() {
   fullWin.webContents.send('capri:settings-close');
   if (settingsOpenedFromPortrait) showPortrait();
   settingsOpenedFromPortrait = false;
 }
 
-// Load the model and system prompt
+// Load the model and system prompt on startup
 let warmupPromise = null;
-
 function warmUp() {
   if (!warmupPromise) {
     let timer;
@@ -378,36 +424,62 @@ function warmUp() {
   return warmupPromise;
 }
 
-// Assistant work stays in the main process
-async function runBrain(text, settings, onToolUsage) {
-  // Pass a copy so a failed call can't leave a half-edited history behind
-  const result = await brain.ask(text, [...history], settings, onToolUsage);
+// Run the model brain
+async function runBrain(text, settings, onToolUsage, onText) {
+  const result = await brain.ask(text, [...history], settings, onToolUsage, onText);
   if (Array.isArray(result.messages)) history = result.messages;
   return result;
 }
 
-async function askBrain(text, settings, onToolUsage) {
+// Send query to brain
+async function askBrain(text, settings, onToolUsage, onText) {
   try {
-    return await runBrain(text, settings, onToolUsage);
+    return await runBrain(text, settings, onToolUsage, onText);
   } catch (error) {
     if (!/No user query/i.test(error.message)) throw error;
     history = [];
-    return await runBrain(text, settings, onToolUsage);
+    return await runBrain(text, settings, onToolUsage, onText);
   }
 }
 
+// Warm up the model once
 ipcMain.handle('capri:warmup', () => warmUp());
+
+// Get the model settings
 ipcMain.handle('settings:get', () => {
-  const { groqApiKey, braveApiKey, ...settings } = appSettings;
+  const {
+    groqApiKey,
+    braveApiKey,
+    fishApiKey,
+    ...settings
+  } = appSettings;
+
   return {
     ...settings,
     defaultStartDirectory: app.getPath('home'),
     ...brain.getConfiguration(appSettings),
-    hasGroqApiKeyOverride: Boolean(groqApiKey),
-    hasBraveApiKey: Boolean(braveApiKey),
+    braveApiKey,
+    fishApiKey,
   };
 });
 
+// Get the speech enabled flag
+ipcMain.handle('settings:set-speech-enabled', async (_event, enabled) => {
+  if (typeof enabled !== 'boolean') {
+    throw new Error('Speech must be turned on or off.');
+  }
+
+  const updatedSettings = { ...appSettings, speechEnabled: enabled };
+  await writeSettings(updatedSettings);
+  appSettings = updatedSettings;
+
+  if (!enabled) stopSpeech();
+  broadcast('capri:speech-enabled', enabled);
+
+  return { speechEnabled: enabled };
+});
+
+// Update a Groq related setting
 async function saveGroqSetting(setting, value) {
   const updatedSettings = { ...appSettings, [setting]: value };
   await writeSettings(updatedSettings);
@@ -415,10 +487,10 @@ async function saveGroqSetting(setting, value) {
   warmupPromise = null;
   return {
     ...brain.getConfiguration(appSettings),
-    hasGroqApiKeyOverride: Boolean(appSettings.groqApiKey),
   };
 }
 
+// Verify the provided Groq models
 function validateGroqModelList(models, label) {
   if (!Array.isArray(models) || models.length > 3) {
     throw new Error(`Enter up to 3 ${label} models.`);
@@ -433,6 +505,7 @@ function validateGroqModelList(models, label) {
   return normalizeModelList(models);
 }
 
+// Set the Groq API key
 ipcMain.handle('settings:set-groq-api-key', async (_event, apiKey) => {
   if (typeof apiKey !== 'string' || apiKey.length > 512) {
     throw new Error('Groq API key must be 512 characters or fewer.');
@@ -441,6 +514,7 @@ ipcMain.handle('settings:set-groq-api-key', async (_event, apiKey) => {
   return saveGroqSetting('groqApiKey', apiKey.trim());
 });
 
+// Set the Brave API key
 ipcMain.handle('settings:set-brave-api-key', async (_event, apiKey) => {
   if (typeof apiKey !== 'string' || apiKey.length > 512) {
     throw new Error('Brave API key must be 512 characters or fewer.');
@@ -452,6 +526,7 @@ ipcMain.handle('settings:set-brave-api-key', async (_event, apiKey) => {
   return { hasBraveApiKey: Boolean(appSettings.braveApiKey) };
 });
 
+// Set Groq text models
 ipcMain.handle('settings:set-groq-text-models', async (_event, models) => {
   return saveGroqSetting(
     'groqTextModels',
@@ -459,6 +534,7 @@ ipcMain.handle('settings:set-groq-text-models', async (_event, models) => {
   );
 });
 
+// Set Groq voice models
 ipcMain.handle('settings:set-groq-voice-models', async (_event, models) => {
   return saveGroqSetting(
     'groqVoiceModels',
@@ -466,6 +542,58 @@ ipcMain.handle('settings:set-groq-voice-models', async (_event, models) => {
   );
 });
 
+// Set the Fish API key
+ipcMain.handle('settings:set-fish-api-key', async (_event, apiKey) => {
+  if (typeof apiKey !== 'string' || apiKey.length > 512) {
+    throw new Error('Fish Audio API key must be 512 characters or fewer.');
+  }
+
+  const updatedSettings = {
+    ...appSettings,
+    fishApiKey: apiKey.trim(),
+  };
+
+  await writeSettings(updatedSettings);
+  appSettings = updatedSettings;
+
+  return {
+    hasFishApiKey: Boolean(appSettings.fishApiKey),
+  };
+});
+
+// Set Fish TTS models
+ipcMain.handle('settings:set-fish-tts-models', async (_event, models) => {
+  const updatedSettings = {
+    ...appSettings,
+    fishTtsModels: validateGroqModelList(models, 'TTS'),
+  };
+
+  await writeSettings(updatedSettings);
+  appSettings = updatedSettings;
+
+  return { fishTtsModels: brain.getConfiguration(appSettings).fishTtsModels };
+});
+
+// Set the Fish voice id
+ipcMain.handle('settings:set-fish-voice-id', async (_event, voiceId) => {
+  if (typeof voiceId !== 'string' || voiceId.length > 256) {
+    throw new Error('Fish Audio voice ID must be 256 characters or fewer.');
+  }
+
+  const updatedSettings = {
+    ...appSettings,
+    fishVoiceId: voiceId.trim(),
+  };
+
+  await writeSettings(updatedSettings);
+  appSettings = updatedSettings;
+
+  return {
+    fishVoiceId: appSettings.fishVoiceId,
+  };
+});
+
+// Set the current timezone
 ipcMain.handle('settings:set-time-zone', async (_event, timeZone) => {
   if (!isValidTimeZone(timeZone)) {
     throw new Error('Choose a valid IANA time zone.');
@@ -489,6 +617,8 @@ ipcMain.handle('settings:set-user-name', async (_event, userName) => {
   appSettings = updatedSettings;
   return { ...appSettings };
 });
+
+// Set the "require input to start" flag
 ipcMain.handle('settings:set-require-start', async (_event, requireStart) => {
   if (typeof requireStart !== 'boolean') {
     throw new Error('Require start must be enabled or disabled.');
@@ -499,6 +629,20 @@ ipcMain.handle('settings:set-require-start', async (_event, requireStart) => {
   appSettings = updatedSettings;
   return { requireStart };
 });
+
+// Set the "start app in mini view" flag
+ipcMain.handle('settings:set-start-in-mini', async (_event, startInMini) => {
+  if (typeof startInMini !== 'boolean') {
+    throw new Error('Start in mini view must be enabled or disabled.');
+  }
+
+  const updatedSettings = { ...appSettings, startInMini };
+  await writeSettings(updatedSettings);
+  appSettings = updatedSettings;
+  return { startInMini };
+});
+
+// Set nickname for an executable file
 ipcMain.handle(
   'settings:set-executable-nickname',
   async (_event, category, executablePath, nickname) => {
@@ -559,7 +703,7 @@ ipcMain.handle(
   }
 );
 
-// Open native dialogs for selecting game libraries and software folders.
+// Open native dialogs for selecting app folders and executables
 ipcMain.handle('capri-settings:select-game-paths', async () => {
   const result = await dialog.showOpenDialog({
     title: 'Select Game Library Folders',
@@ -568,7 +712,6 @@ ipcMain.handle('capri-settings:select-game-paths', async () => {
 
   return result.canceled ? [] : result.filePaths;
 });
-
 ipcMain.handle('capri-settings:select-software-paths', async () => {
   const result = await dialog.showOpenDialog({
     title: 'Select Software Folders',
@@ -577,7 +720,6 @@ ipcMain.handle('capri-settings:select-software-paths', async () => {
 
   return result.canceled ? [] : result.filePaths;
 });
-
 ipcMain.handle('capri-settings:select-executables', async () => {
   const result = await dialog.showOpenDialog({
     title: 'Select Executables',
@@ -588,6 +730,7 @@ ipcMain.handle('capri-settings:select-executables', async () => {
   return result.canceled ? [] : result.filePaths;
 });
 
+// Save directory path to settings
 async function saveDirectoryPaths(paths, settingKey, description) {
   if (!Array.isArray(paths)) {
     throw new Error(`Invalid ${description} folder paths.`);
@@ -635,14 +778,15 @@ async function saveDirectoryPaths(paths, settingKey, description) {
   return [...appSettings[settingKey]];
 }
 
+// Set paths for applications
 ipcMain.handle('capri-settings:set-game-paths', (_event, paths) =>
   saveDirectoryPaths(paths, 'gamePaths', 'game')
 );
-
 ipcMain.handle('capri-settings:set-software-paths', (_event, paths) =>
   saveDirectoryPaths(paths, 'softwarePaths', 'software')
 );
 
+// Set the starting directory
 ipcMain.handle('capri-settings:select-start-directory', async () => {
   const result = await dialog.showOpenDialog({
     title: 'Select Start Folder',
@@ -652,7 +796,6 @@ ipcMain.handle('capri-settings:select-start-directory', async () => {
 
   return result.canceled ? [] : result.filePaths;
 });
-
 ipcMain.handle('capri-settings:set-start-directory', async (_event, directory) => {
   if (typeof directory !== 'string' || directory.length > 1024) {
     throw new Error('Invalid start folder.');
@@ -673,8 +816,20 @@ ipcMain.handle('capri-settings:set-start-directory', async (_event, directory) =
   return { startDirectory: resolved };
 });
 
-const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
+// Text to speech
+ipcMain.handle('capri:speak', async (_event, text) => {
+  try {
+    const audio = await brain.textToSpeech(text, { ...appSettings });
 
+    return Uint8Array.from(audio);
+  } catch (error) {
+    console.error('Fish Audio TTS failed:', error);
+    throw error;
+  }
+});
+
+// Transcription
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 ipcMain.handle('capri:transcribe', async (_event, audio) => {
   try {
     if (!audio || typeof audio !== 'object') {
@@ -704,33 +859,100 @@ ipcMain.handle('capri:transcribe', async (_event, audio) => {
   }
 });
 
-ipcMain.handle('capri:ask', async (event, query) => {
+
+let turnCounter = 0;
+let activeSpeech = null;
+function sendTo(webContents, channel, payload) {
+  if (webContents && !webContents.isDestroyed()) webContents.send(channel, payload);
+}
+
+// Cancel text to speech
+function stopSpeech() {
+  activeSpeech?.cancel();
+  activeSpeech = null;
+}
+ipcMain.on('capri:stop-speech', stopSpeech);
+
+// Query
+ipcMain.handle('capri:ask', async (event, query, options) => {
   // Wait for warmup
   await warmUp();
 
+  const sender = event.sender;
+  const turnId = ++turnCounter;
+  const speak = options?.speak === true && appSettings.speechEnabled;
+
   transcript.push({ who: 'you', text: String(query) });
-  broadcast('capri:sync', transcript, event.sender);
+  broadcast('capri:sync', transcript, sender);
+
+  // New question cuts off the previous answer
+  stopSpeech();
+
+  let speech = null;
+  let speechTried = false;
+
+  const startSpeech = () => {
+    if (speechTried || !speak || !appSettings.speechEnabled) return;
+    speechTried = true;
+
+    try {
+      const session = brain.textToSpeechStream({ ...appSettings }, {
+        onAudio: (chunk) => sendTo(sender, 'capri:audio-chunk', { turnId, chunk }),
+        onError: (error) => {
+          console.error('Fish Audio stream failed:', error.message);
+          sendTo(sender, 'capri:audio-error', {
+            turnId,
+            error: brain.getFriendlyErrorMessage(error),
+          });
+        },
+      });
+
+      speech = session;
+      activeSpeech = session;
+      sendTo(sender, 'capri:audio-start', { turnId, sampleRate: brain.TTS_SAMPLE_RATE });
+
+      session.done.then(() => {
+        if (activeSpeech === session) activeSpeech = null;
+        sendTo(sender, 'capri:audio-end', { turnId });
+      });
+    } catch (error) {
+      console.error('Could not start speech:', error.message);
+      sendTo(sender, 'capri:audio-error', {
+        turnId,
+        error: brain.getFriendlyErrorMessage(error),
+      });
+    }
+  };
+
+  let streamed = '';
+  const onText = (delta) => {
+    streamed += delta;
+    broadcast('capri:text-delta', { turnId, text: streamed });
+    startSpeech();
+    speech?.push(delta);
+  };
 
   let reply;
   try {
     const onToolUsage = (toolUsage) =>
       broadcast('capri:tool-usage', toolUsage);
     reply = (
-      await askBrain(String(query), { ...appSettings }, onToolUsage)
+      await askBrain(String(query), { ...appSettings }, onToolUsage, onText)
     ).text ?? '';
   } catch (error) {
     console.error('Assistant request failed:', error);
     reply = brain.getFriendlyErrorMessage(error);
   }
 
+  speech?.end();
+
   transcript.push({ who: 'capri', text: reply });
-  broadcast('capri:sync', transcript, event.sender);
-  return { text: reply };
+  broadcast('capri:sync', transcript, sender);
+  return { text: reply, turnId };
 });
 
-// Keep the sprite state the same in every window
+// Window management
 ipcMain.on('win:state', (event, state) => broadcast('capri:state', state, event.sender));
-
 ipcMain.on('win:full', showFull);
 ipcMain.on('win:portrait', showPortrait);
 ipcMain.on('win:settings-close', closeSettings);
@@ -739,7 +961,6 @@ ipcMain.on('win:chat-close', closeChat);
 
 // Dragging
 let dragOrigin = null;
-
 ipcMain.on('win:drag-start', () => {
   dragOrigin = {
     cursor: screen.getCursorScreenPoint(),
@@ -748,7 +969,6 @@ ipcMain.on('win:drag-start', () => {
     moved: false,
   };
 });
-
 ipcMain.on('win:drag-move', () => {
   if (!dragOrigin) return;
   dragOrigin.moved = true;
@@ -764,7 +984,6 @@ ipcMain.on('win:drag-move', () => {
   const c = dragOrigin.chat;
   if (c) chatWin.setBounds({ x: c.x + dx, y: c.y + dy, width: c.width, height: c.height });
 });
-
 ipcMain.on('win:drag-end', () => {
   const moved = dragOrigin?.moved;
   dragOrigin = null;
@@ -775,6 +994,7 @@ ipcMain.on('win:drag-end', () => {
   }
 });
 
+// Menu
 ipcMain.on('win:menu', () => {
   Menu.buildFromTemplate([
     { label: 'Open full view', click: showFull },
@@ -785,10 +1005,12 @@ ipcMain.on('win:menu', () => {
   ]).popup({ window: portraitWin });
 });
 
+// Mouse
 ipcMain.on('win:ignore-mouse', (_event, ignore) => {
   portraitWin?.setIgnoreMouseEvents(ignore === true, { forward: true });
 });
 
+// Startup
 app.whenReady().then(async () => {
   const appPageUrl = pathToFileURL(page).href;
   session.defaultSession.setPermissionRequestHandler(
@@ -819,5 +1041,6 @@ app.whenReady().then(async () => {
   globalShortcut.register(TOGGLE_KEY, toggleView);
 });
 
+// Closing
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());

@@ -1,5 +1,5 @@
 (() => {
-  // Timezone settings elements.
+  // Settings elements from HTML
   const timeZoneSelect = document.querySelector('#timezone');
   const timeZoneId = document.querySelector('#timezone-id');
   const status = document.querySelector('#settings-status');
@@ -7,6 +7,8 @@
   const userNameStatus = document.querySelector('#user-name-status');
   const requireStartInput = document.querySelector('#require-start');
   const requireStartStatus = document.querySelector('#require-start-status');
+  const startInMiniInput = document.querySelector('#start-in-mini');
+  const startInMiniStatus = document.querySelector('#start-in-mini-status');
   const groqApiKeyInput = document.querySelector('#groq-api-key');
   const groqApiKeyStatus = document.querySelector('#groq-api-key-status');
   const groqApiKeySaveButton = document.querySelector('#save-groq-api-key');
@@ -23,6 +25,17 @@
   const braveApiKeyStatus = document.querySelector('#brave-api-key-status');
   const braveApiKeySaveButton = document.querySelector('#save-brave-api-key');
   const braveApiKeyToggle = document.querySelector('#toggle-brave-api-key');
+  const fishApiKeyInput = document.getElementById('fish-api-key');
+  const fishSaveApiKeyButton = document.getElementById('save-fish-api-key');
+  const fishApiKeyToggle = document.getElementById('toggle-fish-api-key');
+  const fishApiKeyStatus = document.getElementById('fish-api-key-status');
+  const fishTtsModelList = document.querySelector('#fish-tts-models');
+  const fishTtsModelAddButton = document.querySelector('#add-fish-tts-model');
+  const fishTtsModelSaveButton = document.querySelector('#save-fish-tts-model');
+  const fishTtsModelStatus = document.querySelector('#fish-tts-model-status');
+  const fishVoiceIdInput = document.getElementById('fish-voice-id');
+  const fishSaveVoiceIdButton = document.getElementById('save-fish-voice-id');
+  const fishVoiceIdStatus = document.getElementById('fish-voice-id-status');
   const startDirectoryLabel = document.querySelector('#start-directory');
   const startDirectoryName = document.querySelector('#start-directory-name');
   const startDirectoryStatus = document.querySelector('#start-directory-status');
@@ -35,9 +48,12 @@
   const timeZoneLabel = document.querySelector('#timezone-label');
   const timeZoneOptions = document.querySelector('#timezone-options');
   const timeZoneWrap = document.querySelector('.settings-select-wrap');
+  
+  // Original button text
   const saveButtonLabels = new WeakMap();
   const saveButtonTimers = new WeakMap();
 
+  // Show that the field has been saved
   function showSaved(button) {
     if (!saveButtonLabels.has(button)) {
       saveButtonLabels.set(button, button.textContent.trim());
@@ -51,6 +67,7 @@
     }, 1000));
   }
 
+  // Add one editable model row
   function appendModelInput(container, model = '') {
     const row = document.createElement('div');
     const priority = document.createElement('span');
@@ -79,6 +96,7 @@
     container.appendChild(row);
   }
 
+  // Refresh row numbering
   function updateModelEditor(container, addButton) {
     const rows = [...container.querySelectorAll('.settings-model-row')];
     const label = container.dataset.modelLabel || 'Model';
@@ -101,6 +119,7 @@
     addButton.disabled = rows.length >= 3;
   }
 
+  // Render the saved model list
   function renderModelInputs(container, models, addButton) {
     const values = Array.isArray(models)
       ? models
@@ -123,6 +142,7 @@
       .filter(Boolean);
   }
 
+  // Insert a new empty model row
   function addModelInput(container, addButton) {
     const count = container.querySelectorAll('[data-model-input]').length;
 
@@ -154,6 +174,7 @@
     });
   }
   
+  // Folder and executable settings
   const directorySettings = [
     {
       key: 'gamePaths',
@@ -187,6 +208,7 @@
     }
   ].filter((directory) => directory.list);
 
+  // Disable all elements initially
   timeZoneSelect.disabled = true;
   for (const directory of directorySettings) {
     directory.paths = [];
@@ -196,6 +218,7 @@
   }
   if (userNameInput) userNameInput.disabled = true;
   if (requireStartInput) requireStartInput.disabled = true;
+  if (startInMiniInput) startInMiniInput.disabled = true;
   for (const element of [
     groqApiKeyInput,
     groqTextModelAddButton,
@@ -207,21 +230,29 @@
     braveApiKeyInput,
     braveApiKeySaveButton,
     braveApiKeyToggle,
+    fishApiKeyInput,
+    fishApiKeyToggle,
+    fishSaveApiKeyButton,
+    fishVoiceIdInput,
+    fishSaveVoiceIdButton,
   ]) {
     if (element) element.disabled = true;
   }
-
   let savedTimeZone = null;
   let savedUserName = '';
   let savedRequireStart = false;
+  let savedStartInMini = false;
   let savedGroqApiKey = '';
-  let hasSavedBraveApiKey = false;
+  let savedFishApiKey = '';
+  let savedFishVoiceId = '';
+  let savedBraveApiKey = '';
   let savedGroqTextModels = [];
   let savedGroqVoiceModels = [];
+  let savedFishTtsModels = [];
   let savedStartDirectory = '';
   let defaultStartDirectory = '';
 
-  // Get the current UTC offset for a timezone.
+  // Get the current UTC offset for a timezone
   function getOffsetMinutes(timeZone) {
     const offset = new Intl.DateTimeFormat('en-US', {
       timeZone,
@@ -241,7 +272,7 @@
     return match[1] === '+' ? minutes : -minutes;
   }
 
-  // Format an offset as GMT+HH:MM or GMT-HH:MM.
+  // Format a numeric offset as a readable GMT label
   function formatOffset(offset) {
     const sign = offset < 0 ? '-' : '+';
     const absolute = Math.abs(offset);
@@ -251,7 +282,7 @@
     return `GMT${sign}${hours}:${minutes}`;
   }
 
-  // Build timezone options grouped by their current UTC offset.
+  // Build timezone options
   const zonesByOffset = new Map();
   const timeZones = [
     ...new Set([...Intl.supportedValuesOf('timeZone'), 'UTC'])
@@ -290,11 +321,12 @@
     optionsByOffset.set(offset, option);
   }
 
+  // Show the current IANA timezone id
   function showTimeZoneId(timeZone) {
     timeZoneId.textContent = `IANA timezone: ${timeZone}`;
   }
 
-  // Close the timezone dropdown.
+  // Close the timezone dropdown
   function closeOptions(returnFocus = false) {
     timeZoneOptions.hidden = true;
     timeZoneToggle.setAttribute('aria-expanded', 'false');
@@ -302,7 +334,7 @@
     if (returnFocus) timeZoneToggle.focus();
   }
 
-  // Focus a timezone option by its index.
+  // Focus a timezone option
   function focusOption(index) {
     const options = [
       ...timeZoneOptions.querySelectorAll('[role="option"]')
@@ -323,7 +355,7 @@
     focusOption(index);
   }
 
-  // Rebuild the custom timezone dropdown.
+  // Rebuild the custom timezone dropdown
   function renderOptions() {
     timeZoneOptions.replaceChildren();
 
@@ -353,7 +385,7 @@
     }
   }
 
-  // Save a selected timezone.
+  // Save a selected timezone
   async function chooseTimeZone(timeZone) {
     const previousTimeZone = savedTimeZone;
 
@@ -380,6 +412,7 @@
     }
   }
 
+  // Deduplicate path entries and strip empty
   function normalizePaths(paths) {
     const result = [];
     const seen = new Set();
@@ -400,6 +433,7 @@
     return result;
   }
 
+  // Draw the current list of app paths
   function renderDirectoryPaths(directory) {
     directory.list.replaceChildren();
 
@@ -486,6 +520,7 @@
     return icon;
   }
 
+  // Save directories and rollback the UI if validation fails
   async function saveDirectoryPaths(directory, paths) {
     const previousPaths = [...directory.paths];
     const previousNicknames = { ...directory.nicknames };
@@ -533,6 +568,7 @@
     }
   }
 
+  // Save a nickname for an executable
   async function saveExecutableNickname(directory, input) {
     if (!window.capriSettings?.setExecutableNickname) {
       directory.status.textContent = 'Executable nicknames are unavailable.';
@@ -563,6 +599,7 @@
     }
   }
 
+  // Save the user's preferred name
   async function saveUserName() {
     if (!userNameInput || !window.capriSettings?.setUserName) return;
 
@@ -583,6 +620,7 @@
     }
   }
 
+  // Save the "require input to start" flag
   async function saveRequireStart() {
     if (!requireStartInput) return;
     if (!window.capriSettings?.setRequireStart) {
@@ -608,6 +646,33 @@
     }
   }
 
+  // Save the "start app in mini view" flag
+  async function saveStartInMini() {
+    if (!startInMiniInput) return;
+    if (!window.capriSettings?.setStartInMini) {
+      startInMiniInput.checked = savedStartInMini;
+      startInMiniStatus.textContent = 'Start in mini view setting is unavailable.';
+      return;
+    }
+
+    startInMiniInput.disabled = true;
+    try {
+      const settings = await window.capriSettings.setStartInMini(
+        startInMiniInput.checked
+      );
+      savedStartInMini = settings.startInMini === true;
+      startInMiniInput.checked = savedStartInMini;
+      startInMiniStatus.textContent = '';
+    } catch (error) {
+      startInMiniInput.checked = savedStartInMini;
+      startInMiniStatus.textContent =
+        `Couldn't save start in mini view setting: ${error.message}`;
+    } finally {
+      startInMiniInput.disabled = false;
+    }
+  }
+
+  // Store the Groq API key and clear the warmup cache
   async function saveGroqApiKey() {
     if (!window.capriSettings?.setGroqApiKey) return;
 
@@ -631,6 +696,73 @@
     }
   }
 
+  // Store the Fish Audio API key and clear the warmup cache
+  async function saveFishApiKey() {
+    if (!window.capriSettings?.setFishApiKey) {
+      fishApiKeyStatus.textContent = 'Fish Audio settings are unavailable.';
+      return;
+    }
+
+    const apiKey = fishApiKeyInput.value.trim();
+
+    if (apiKey === savedFishApiKey) {
+      showSaved(fishSaveApiKeyButton);
+      return;
+    }
+
+    fishSaveApiKeyButton.disabled = true;
+
+    try {
+      savedFishApiKey = apiKey;
+      fishApiKeyInput.value = savedFishApiKey;
+
+      fishApiKeyStatus.textContent = '';
+      showSaved(fishSaveApiKeyButton);
+    } catch (error) {
+      fishApiKeyStatus.textContent =
+        `Couldn't save Fish Audio API key: ${error.message}`;
+    } finally {
+      fishSaveApiKeyButton.disabled =
+        fishApiKeyInput.value.trim() === savedFishApiKey;
+    }
+  }
+
+// Save the Fish TTS voice preset
+async function saveFishVoiceId() {
+  if (!window.capriSettings?.setFishVoiceId) {
+    fishVoiceIdStatus.textContent = 'Fish Audio settings are unavailable.';
+    return;
+  }
+
+  const voiceId = fishVoiceIdInput.value.trim();
+
+  if (voiceId === savedFishVoiceId) {
+    showSaved(fishSaveVoiceIdButton);
+    return;
+  }
+
+  fishSaveVoiceIdButton.disabled = true;
+
+  try {
+    const settings = await window.capriSettings.setFishVoiceId(voiceId);
+
+    savedFishVoiceId = settings.fishVoiceId || '';
+    fishVoiceIdInput.value = savedFishVoiceId;
+
+    fishVoiceIdStatus.textContent = savedFishVoiceId
+      ? ''
+      : 'Using Capri\'s default voice.';
+
+    showSaved(fishSaveVoiceIdButton);
+  } catch (error) {
+    fishVoiceIdStatus.textContent =
+      `Couldn't save Fish Audio voice ID: ${error.message}`;
+  } finally {
+    fishSaveVoiceIdButton.disabled =
+      fishVoiceIdInput.value.trim() === savedFishVoiceId;
+  }
+}
+
   async function saveBraveApiKey() {
     if (!window.capriSettings?.setBraveApiKey) {
       braveApiKeyStatus.textContent = 'Brave API key settings are unavailable.';
@@ -638,16 +770,16 @@
     }
 
     const apiKey = braveApiKeyInput.value.trim();
-    if (!apiKey && !hasSavedBraveApiKey) {
+    if (apiKey === savedBraveApiKey) {
       showSaved(braveApiKeySaveButton);
       return;
     }
 
     braveApiKeySaveButton.disabled = true;
     try {
-      const settings = await window.capriSettings.setBraveApiKey(apiKey);
-      hasSavedBraveApiKey = settings.hasBraveApiKey === true;
-      braveApiKeyInput.value = '';
+      await window.capriSettings.setBraveApiKey(apiKey);
+      savedBraveApiKey = apiKey;
+      braveApiKeyInput.value = savedBraveApiKey;
       braveApiKeyStatus.textContent = '';
       showSaved(braveApiKeySaveButton);
     } catch (error) {
@@ -658,6 +790,7 @@
     }
   }
 
+  // Save a list of Groq model IDs
   async function saveGroqModels(
     container,
     status,
@@ -697,14 +830,16 @@
     try {
       const settings = await window.capriSettings[settingMethod](models);
 
-      const settingKey = settingMethod === 'setGroqTextModels'
-        ? 'groqTextModels'
-        : 'groqVoiceModels';
+      const settingKeys = {
+        setGroqTextModels: 'groqTextModels',
+        setGroqVoiceModels: 'groqVoiceModels',
+        setFishTtsModels: 'fishTtsModels',
+      };
+      const settingKey = settingKeys[settingMethod];
 
       const savedModels = Array.isArray(settings[settingKey])
         ? settings[settingKey]
         : models;
-
       setSavedModels(savedModels);
 
       renderModelInputs(container, savedModels, addButton);
@@ -722,6 +857,7 @@
     }
   }
 
+  // Open the picker and add chosen path
   async function addDirectoryPaths(directory, button, selectMethod, prompt) {
     if (!window.capriSettings?.[selectMethod]) {
       directory.status.textContent = 'Path selection is unavailable.';
@@ -734,7 +870,7 @@
     try {
       const selectedPaths = await window.capriSettings[selectMethod]();
 
-      // Cancelled dialogs return an empty array.
+      // Cancelled dialogs
       if (!Array.isArray(selectedPaths) || selectedPaths.length === 0) {
         directory.status.textContent = '';
         return;
@@ -749,6 +885,7 @@
     }
   }
 
+  // Show the currently selected startup directory
   function renderStartDirectory() {
     if (!startDirectoryLabel || !startDirectoryName) return;
 
@@ -767,6 +904,7 @@
     resetStartButton.disabled = !savedStartDirectory;
   }
 
+  // Save the new startup directory
   async function saveStartDirectory(directory) {
     if (!window.capriSettings?.setStartDirectory) {
       startDirectoryStatus.textContent = 'Start folder setting is unavailable.';
@@ -800,6 +938,10 @@
         requireStartStatus.textContent =
           `Couldn't load startup setting: ${error.message}`;
       }
+      if (startInMiniStatus) {
+        startInMiniStatus.textContent =
+          `Couldn't load start in mini view setting: ${error.message}`;
+      }
       for (const directory of directorySettings) {
         directory.status.textContent =
           `Couldn't load ${directory.label} settings.`;
@@ -807,7 +949,6 @@
       return;
     }
 
-    // Restore timezone selection.
     savedUserName = typeof settings.userName === 'string'
       ? settings.userName
       : '';
@@ -815,12 +956,19 @@
       userNameInput.value = savedUserName;
       userNameInput.disabled = false;
     }
+
     savedRequireStart = settings.requireStart === true;
     if (requireStartInput) {
       requireStartInput.checked = savedRequireStart;
       requireStartInput.disabled = false;
     }
-    // The main process never sends the saved key back, so the field starts empty.
+
+    savedStartInMini = settings.startInMini === true;
+    if (startInMiniInput) {
+      startInMiniInput.checked = savedStartInMini;
+      startInMiniInput.disabled = false;
+    }
+    
     savedGroqApiKey = typeof settings.groqApiKey === 'string'
       ? settings.groqApiKey
       : '';
@@ -831,12 +979,49 @@
     if (groqApiKeySaveButton) groqApiKeySaveButton.disabled = false;
     if (groqApiKeyToggle) groqApiKeyToggle.disabled = false;
     groqApiKeyStatus.textContent = '';
-    hasSavedBraveApiKey = settings.hasBraveApiKey === true;
-    if (braveApiKeyInput) braveApiKeyInput.disabled = false;
+
+    savedFishApiKey = typeof settings.fishApiKey === 'string'
+      ? settings.fishApiKey
+      : '';
+
+    if (fishApiKeyInput) {
+      fishApiKeyInput.value = savedFishApiKey;
+      fishApiKeyInput.disabled = false;
+    }
+    if (fishApiKeyToggle) {
+      fishApiKeyToggle.disabled = false;
+    }
+    if (fishSaveApiKeyButton) {
+      fishSaveApiKeyButton.disabled = true;
+    }
+
+    savedFishVoiceId = typeof settings.fishVoiceId === 'string'
+      ? settings.fishVoiceId
+      : '';
+
+    if (fishVoiceIdInput) {
+      fishVoiceIdInput.value = savedFishVoiceId;
+      fishVoiceIdInput.disabled = false;
+    }
+
+    if (fishSaveVoiceIdButton) {
+      fishSaveVoiceIdButton.disabled = true;
+    }
+
+    fishApiKeyStatus.textContent = '';
+    fishVoiceIdStatus.textContent = '';
+
+    savedBraveApiKey = typeof settings.braveApiKey === 'string'
+      ? settings.braveApiKey
+      : '';
+    if (braveApiKeyInput) {
+      braveApiKeyInput.value = savedBraveApiKey;
+      braveApiKeyInput.disabled = false;
+    }
     if (braveApiKeySaveButton) braveApiKeySaveButton.disabled = false;
     if (braveApiKeyToggle) braveApiKeyToggle.disabled = false;
+    braveApiKeyStatus.textContent = '';
  
-    // Load text models
     const textModels =
       settings.groqTextModels ??
       settings.groqTextModel ??
@@ -858,7 +1043,6 @@
       groqTextModelSaveButton.disabled = false;
     }
 
-    // Load voice models
     const voiceModels =
       settings.groqVoiceModels ??
       settings.groqVoiceModel;
@@ -878,6 +1062,21 @@
     if (groqVoiceModelSaveButton) {
       groqVoiceModelSaveButton.disabled = false;
     }
+
+    savedFishTtsModels = Array.isArray(settings.fishTtsModels)
+      ? settings.fishTtsModels
+      : [];
+
+    renderModelInputs(
+      fishTtsModelList,
+      savedFishTtsModels,
+      fishTtsModelAddButton
+    );
+
+    if (fishTtsModelSaveButton) {
+      fishTtsModelSaveButton.disabled = false;
+    }
+
     defaultStartDirectory =
       typeof settings.defaultStartDirectory === 'string'
         ? settings.defaultStartDirectory
@@ -930,8 +1129,18 @@
   // Update username on change
   userNameInput?.addEventListener('change', saveUserName);
 
-  // Update start flag on change
+  // Update require start input flag on change
   requireStartInput?.addEventListener('change', saveRequireStart);
+
+  // Update start in mini view flag on change
+  startInMiniInput?.addEventListener('change', saveStartInMini);
+
+  // Groq API key input
+  groqApiKeyInput?.addEventListener('input', () => {
+    groqApiKeySaveButton.disabled =
+      groqApiKeyInput.value.trim() === savedGroqApiKey;
+    groqApiKeyStatus.textContent = '';
+  });
 
   // Update API key on button press
   groqApiKeySaveButton?.addEventListener('click', () => saveGroqApiKey());
@@ -970,6 +1179,22 @@
     )
   );
 
+  // Update the fish tts model on button press
+  fishTtsModelSaveButton?.addEventListener('click', () =>
+    saveGroqModels(
+      fishTtsModelList,
+      fishTtsModelStatus,
+      fishTtsModelSaveButton,
+      fishTtsModelAddButton,
+      'setFishTtsModels',
+      () => savedFishTtsModels,
+      (models) => {
+        savedFishTtsModels = models;
+      },
+      'TTS models'
+    )
+  );
+
   // Toggle API key visibility on button press
   groqApiKeyToggle?.addEventListener('click', () => {
     const showApiKey = groqApiKeyInput.type === 'password';
@@ -980,6 +1205,44 @@
       showApiKey ? 'Hide API key' : 'Show API key'
     );
     groqApiKeyToggle.title = showApiKey ? 'Hide API key' : 'Show API key';
+  });
+
+  // Fish Audio API key
+  fishApiKeyInput?.addEventListener('input', () => {
+    fishSaveApiKeyButton.disabled =
+      fishApiKeyInput.value.trim() === savedFishApiKey;
+    fishApiKeyStatus.textContent = '';
+  });
+
+  fishSaveApiKeyButton?.addEventListener('click', saveFishApiKey);
+
+  // Toggle Fish Audio API key visibility on button press
+  fishApiKeyToggle?.addEventListener('click', () => {
+    const showApiKey = fishApiKeyInput.type === 'password';
+    fishApiKeyInput.type = showApiKey ? 'text' : 'password';
+    fishApiKeyToggle.setAttribute('aria-pressed', String(showApiKey));
+    fishApiKeyToggle.setAttribute(
+      'aria-label',
+      showApiKey ? 'Hide API key' : 'Show API key'
+    );
+    fishApiKeyToggle.title = showApiKey ? 'Hide API key' : 'Show API key';
+  });
+
+  // Fish Audio voice ID
+  fishVoiceIdInput?.addEventListener('input', () => {
+    fishSaveVoiceIdButton.disabled =
+      fishVoiceIdInput.value.trim() === savedFishVoiceId;
+
+    fishVoiceIdStatus.textContent = '';
+  });
+
+  fishSaveVoiceIdButton?.addEventListener('click', saveFishVoiceId);
+
+  // Brave API key input
+  braveApiKeyInput?.addEventListener('input', () => {
+    braveApiKeySaveButton.disabled =
+      braveApiKeyInput.value.trim() === savedBraveApiKey;
+    braveApiKeyStatus.textContent = '';
   });
 
   // Update API key on button press
@@ -1051,6 +1314,7 @@
   });
 
 
+  // Update the timezone when the user clicks on it
   timeZoneOptions.addEventListener('click', (event) => {
     const option = event.target.closest('[role="option"]');
 
@@ -1059,6 +1323,7 @@
     }
   });
 
+  // Update the timezone when the user presses enter
   timeZoneOptions.addEventListener('keydown', (event) => {
     const options = [
       ...timeZoneOptions.querySelectorAll('[role="option"]')

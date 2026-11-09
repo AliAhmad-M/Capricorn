@@ -8,7 +8,7 @@ const MAX_CONTENT_CHARS = 6000;
 const FETCH_TIMEOUT_MS = 30000;
 const MAX_SCAN_DEPTH = 15;
 
-// Tools exposed to the model
+// All tools that Capri can use
 const toolDefinitions = [
   {
     type: 'function',
@@ -435,12 +435,12 @@ const toolDefinitions = [
   }
 ];
 
-// Normalize strings by removing spaces, hyphens, underscores, and punctuation
+// Normalize strings
 function normalizeText(str) {
   return String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-// Fetch and extract readable webpage text
+// Fetch readable text from pages
 async function fetchUrl({ url }) {
   const parsedUrl = new URL(url);
 
@@ -634,7 +634,7 @@ async function discoverExecutables(rootPaths = [], executableNicknames = {}) {
   return executables;
 }
 
-// List discovered executables
+// List discovered games
 async function listGames({
   gamePaths = [],
   gameExecutableNicknames = {}
@@ -690,6 +690,7 @@ async function launchGame({
   return startExecutable(matches, game);
 }
 
+// List discovered softwares
 async function listSoftware({
   softwarePaths = [],
   softwareExecutableNicknames = {}
@@ -720,6 +721,7 @@ async function listSoftware({
   ].join('\n');
 }
 
+// Launch a software
 async function launchSoftware({
   software,
   softwarePaths = [],
@@ -744,6 +746,7 @@ async function launchSoftware({
   return startExecutable(matches, software);
 }
 
+// Find executable apps
 function findExecutables(executables, requestedName, getFolderNames) {
   const search = normalizeText(requestedName);
   if (!search) return [];
@@ -785,12 +788,14 @@ function findExecutables(executables, requestedName, getFolderNames) {
   return matches;
 }
 
+// Handle nicknames
 function formatExecutableName(entry) {
   return entry.nickname
     ? `${entry.nickname} (${entry.name})`
     : entry.name;
 }
 
+// Start an executable app
 async function startExecutable(matches, requestedName) {
   if (matches.length === 0) {
     return `No executable matching "${requestedName}" was found.`;
@@ -827,13 +832,13 @@ async function startExecutable(matches, requestedName) {
   return `Started ${selected.name} from ${selected.path}.`;
 }
 
+// Web search parameters
 const MAX_SEARCH_RESULTS = 5;
 const MAX_SNIPPET_CHARS = 200;
-
 const clip = (text, max) =>
   text.length > max ? `${text.slice(0, max).trim()}...` : text;
 
-// DuckDuckGo wraps result links in a redirect; the real URL is in ?uddg=
+// Unwrap DuckDuckGo links
 function unwrapDuckDuckGoUrl(href) {
   try {
     const url = new URL(href, 'https://duckduckgo.com');
@@ -843,6 +848,7 @@ function unwrapDuckDuckGoUrl(href) {
   }
 }
 
+// Search the web using DuckDuckGo
 async function searchDuckDuckGo(query) {
   const res = await fetch('https://html.duckduckgo.com/html/', {
     method: 'POST',
@@ -887,6 +893,7 @@ async function searchDuckDuckGo(query) {
   return results;
 }
 
+// Search the web using Brave
 async function searchBrave(query, apiKey) {
   const url = new URL('https://api.search.brave.com/res/v1/web/search');
   url.searchParams.set('q', query);
@@ -907,6 +914,7 @@ async function searchBrave(query, apiKey) {
   }));
 }
 
+// Search the web, prefer Brave, fallback to DuckDuckGo
 async function webSearch({ query, apiKey: configuredApiKey }) {
   if (typeof query !== 'string' || !query.trim()) {
     throw new Error('A search query is required.');
@@ -930,6 +938,7 @@ async function webSearch({ query, apiKey: configuredApiKey }) {
     .join('\n\n');
 }
 
+// Get the CPU usage of the PC
 function sampleCpuUsage() {
   return os.cpus().reduce(
     (total, cpu) => {
@@ -941,7 +950,6 @@ function sampleCpuUsage() {
     { idle: 0, total: 0 }
   );
 }
-
 async function getCpuUsage() {
   const before = sampleCpuUsage();
   await new Promise((resolve) => setTimeout(resolve, 250));
@@ -956,6 +964,7 @@ async function getCpuUsage() {
   return Math.round(((total - idle) / total) * 1000) / 10;
 }
 
+// Run a powershell command
 function runPowerShell(script, timeoutMs = 15000) {
   if (process.platform !== 'win32') {
     throw new Error('System monitoring through PowerShell is only available on Windows.');
@@ -1009,6 +1018,7 @@ function runPowerShell(script, timeoutMs = 15000) {
   });
 }
 
+// Get all system usage data
 async function getSystemUsage() {
   const script = [
     '$ErrorActionPreference = "Stop"',
@@ -1098,6 +1108,7 @@ async function getSystemUsage() {
   }, null, 2);
 }
 
+// List top 10 most resource heavy processes
 async function listResourceProcesses({ limit = 10 } = {}) {
   const boundedLimit = Number.isInteger(limit) ? Math.min(20, Math.max(1, limit)) : 10;
   const script = [
@@ -1120,6 +1131,7 @@ async function listResourceProcesses({ limit = 10 } = {}) {
   return JSON.stringify(await runPowerShell(script, 20000), null, 2);
 }
 
+// Check for network connectivity
 async function checkNetworkConnectivity() {
   const interfaces = Object.entries(os.networkInterfaces())
     .flatMap(([name, addresses]) =>
@@ -1152,6 +1164,7 @@ async function checkNetworkConnectivity() {
   }
 }
 
+// File management properties
 const MAX_LIST_ENTRIES = 100;
 const MAX_FIND_RESULTS = 30;
 const MAX_FIND_DEPTH = 8;
@@ -1187,6 +1200,7 @@ const ERROR_MESSAGES = {
   ENOTDIR: 'Part of that path is not a folder.'
 };
 
+// Simplify a file error message
 function describeError(error) {
   if (error instanceof UserError) return `Error: ${error.message}`;
   return `Error: ${ERROR_MESSAGES[error?.code] || error?.message || 'Unknown file error.'}`;
@@ -1203,6 +1217,7 @@ function guarded(fn) {
   };
 }
 
+// Get an instance of electron
 function getElectron() {
   try {
     const electron = require('electron');
@@ -1212,6 +1227,7 @@ function getElectron() {
   }
 }
 
+// Get confirmation to run tool
 async function confirmAction(message, detail) {
   const dialog = getElectron()?.dialog;
   if (!dialog) {
@@ -1233,6 +1249,7 @@ async function confirmAction(message, detail) {
   }
 }
 
+// Get a folder from known path
 function getKnownFolder(name) {
   try {
     const app = getElectron()?.app;
@@ -1243,6 +1260,7 @@ function getKnownFolder(name) {
   return path.join(os.homedir(), name[0].toUpperCase() + name.slice(1));
 }
 
+// Check if target file/directory exists
 async function exists(target) {
   try {
     await fs.access(target);
@@ -1252,6 +1270,7 @@ async function exists(target) {
   }
 }
 
+// Check if the target is a directory
 async function isDirectory(target) {
   try {
     return (await fs.stat(target)).isDirectory();
@@ -1263,7 +1282,6 @@ async function isDirectory(target) {
 // Working directory
 let currentDirectory = null;
 let lastStartDirectory = null;
-
 async function getCurrentDirectory(startDirectory = '') {
   const start = String(startDirectory || '').trim() || os.homedir();
 
@@ -1279,7 +1297,7 @@ async function getCurrentDirectory(startDirectory = '') {
   return currentDirectory;
 }
 
-// Turn whatever the model typed into an absolute path
+// Turn model response into an absolute path
 async function resolvePath(input, cwd) {
   let target = String(input ?? '').trim().replace(/^["']+|["']+$/g, '');
 
@@ -1305,6 +1323,7 @@ async function resolvePath(input, cwd) {
   return direct;
 }
 
+// Return list of system folders
 function systemFolders() {
   return [
     process.env.SystemRoot,
@@ -1388,6 +1407,7 @@ async function walkDirectory(root, {
   await visit(root, 0);
 }
 
+// Format size from bytes into KB, GB, etc.
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
 
@@ -1405,10 +1425,12 @@ function formatSize(bytes) {
 
 const formatDate = (date) => date.toISOString().slice(0, 10);
 
+// Return the current directory
 async function getCurrentDirectoryTool({ startDirectory }) {
   return `Current directory: ${await getCurrentDirectory(startDirectory)}`;
 }
 
+// CHange the current directory
 async function changeDirectory({ path: requested, startDirectory }) {
   const cwd = await getCurrentDirectory(startDirectory);
   const target = await resolvePath(requested, cwd);
@@ -1426,6 +1448,7 @@ async function changeDirectory({ path: requested, startDirectory }) {
   return `Now in ${currentDirectory}`;
 }
 
+// List all sub directories and files
 async function listDirectory({ path: requested, showHidden = false, startDirectory }) {
   const cwd = await getCurrentDirectory(startDirectory);
   const target = await resolvePath(requested, cwd);
@@ -1478,6 +1501,7 @@ async function listDirectory({ path: requested, showHidden = false, startDirecto
   return [header, ...lines, ...footer].join('\n');
 }
 
+// Run a file search query
 async function findFiles({ query, path: searchPath, type = 'any', startDirectory }) {
   const words = String(query ?? '')
     .toLowerCase()
@@ -1536,6 +1560,7 @@ async function findFiles({ query, path: searchPath, type = 'any', startDirectory
   return [`Matches for "${query}" under ${root}:`, ...results, ...notes].join('\n');
 }
 
+// Read data from a text file
 async function readTextFile({ path: requested, maxChars = DEFAULT_READ_CHARS, startDirectory }) {
   const cwd = await getCurrentDirectory(startDirectory);
   const target = await resolvePath(requested, cwd);
@@ -1563,6 +1588,7 @@ async function readTextFile({ path: requested, maxChars = DEFAULT_READ_CHARS, st
     : text || '(The file is empty.)';
 }
 
+// Write data to a text file
 async function writeTextFile({
   path: requested,
   content,
@@ -1607,6 +1633,7 @@ async function createDirectory({ path: requested, startDirectory }) {
   return `Created folder ${target}.`;
 }
 
+// Resolve a path from source to destination
 async function resolveDestination(source, destination, cwd) {
   let target = await resolvePath(destination, cwd);
 
@@ -1617,6 +1644,7 @@ async function resolveDestination(source, destination, cwd) {
   return target;
 }
 
+// Copy a file/directory from source to destination
 async function copyItem({ source, destination, overwrite = false, startDirectory }) {
   const cwd = await getCurrentDirectory(startDirectory);
   const from = await resolvePath(source, cwd);
@@ -1634,6 +1662,7 @@ async function copyItem({ source, destination, overwrite = false, startDirectory
   return `Copied ${from} to ${to}.`;
 }
 
+// Move a file/directory from source to destination
 async function moveItem({ source, destination, overwrite = false, startDirectory }) {
   const cwd = await getCurrentDirectory(startDirectory);
   const from = await resolvePath(source, cwd);
@@ -1664,6 +1693,7 @@ async function moveItem({ source, destination, overwrite = false, startDirectory
   return `Moved ${from} to ${to}.`;
 }
 
+// Delete a file/directory
 async function deleteItem({ path: requested, confirmed = false, startDirectory }) {
   const cwd = await getCurrentDirectory(startDirectory);
   const target = await resolvePath(requested, cwd);
@@ -1687,6 +1717,7 @@ async function deleteItem({ path: requested, confirmed = false, startDirectory }
   return `Moved ${target} to the Recycle Bin.`;
 }
 
+// Open a directory path
 async function openPath({ path: requested, startDirectory }) {
   const cwd = await getCurrentDirectory(startDirectory);
   const target = await resolvePath(requested, cwd);
@@ -1701,17 +1732,6 @@ async function openPath({ path: requested, startDirectory }) {
   if (failure) throw new UserError(failure);
 
   return `Opened ${target}.`;
-}
-
-function define(name, description, properties = {}, required = []) {
-  return {
-    type: 'function',
-    function: {
-      name,
-      description,
-      parameters: { type: 'object', properties, required }
-    }
-  };
 }
 
 const toolImplementations = {

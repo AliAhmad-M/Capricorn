@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; script-src 'self'">
+        content="default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' blob:; script-src 'self'">
   <title>Capricorn</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,7 +32,7 @@
   </div>
 
   <main id="app" class="app">
-    <!-- Portrait panel -->
+    <!-- Portrait section -->
     <section class="side">
       <div id="drag-speech" class="drag-speech" role="status" aria-live="polite" hidden>
         <span id="drag-speech-text"></span>
@@ -46,6 +46,14 @@
             <div class="sweep"></div>
           </div>
         </div>
+        <button id="speech-toggle" class="speech-toggle" type="button"
+        aria-pressed="true" aria-label="Turn speech off" title="Turn speech off">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M11 5 6 9H3v6h3l5 4z"/>
+            <path class="speech-wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>
+            <path class="speech-mute" d="m16 9 5 6m0-6-5 6"/>
+          </svg>
+        </button>
       </div>
       <div class="status" role="status" aria-live="polite">
         <span class="dot"></span>
@@ -95,7 +103,7 @@
     </section>
   </main>
 
-  <!-- Settings  -->
+  <!-- Settings page -->
   <main id="settings-page" class="settings-app" hidden>
     <div class="frame quiet settings-frame">
       <section class="frame-inner settings-panel">
@@ -138,6 +146,22 @@
             </label>
           </div>
           <p id="require-start-status" class="settings-status" role="status" aria-live="polite"></p>
+        </section>
+        <section class="settings-user">
+          <div class="settings-startup-row">
+            <div class="settings-section-heading">
+              <h2 class="settings-section-title">Start in mini view</h2>
+              <p class="settings-section-description">
+                Switch to the mini portrait once Capri finishes loading.
+              </p>
+            </div>
+            <label class="settings-checkbox-field" for="start-in-mini"
+                   aria-label="Start in mini view">
+              <input id="start-in-mini" class="settings-checkbox" type="checkbox"
+                     name="start-in-mini" disabled>
+            </label>
+          </div>
+          <p id="start-in-mini-status" class="settings-status" role="status" aria-live="polite"></p>
         </section>
         <section class="settings-user">
           <div class="settings-section-heading">
@@ -246,6 +270,120 @@
           </div>
           <p
             id="groq-voice-model-status"
+            class="settings-status"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <div class="settings-input-save-row">
+            <label class="settings-field" for="fish-api-key">
+              <span class="settings-field-label">Fish Audio API key
+                <span class="settings-optional">(Optional, for TTS)</span>
+              </span>
+              <span class="settings-secret-input">
+                <input
+                  id="fish-api-key"
+                  class="settings-text-input"
+                  type="password"
+                  name="fish-api-key"
+                  autocomplete="off"
+                  placeholder="Enter key"
+                >
+                <button id="toggle-fish-api-key" class="settings-secret-toggle" type="button"
+                        aria-label="Show API key" title="Show API key" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                    <path class="settings-secret-eye-slash" d="m3 3 18 18"/>
+                  </svg>
+                </button>
+              </span>
+            </label>
+            <button
+              id="save-fish-api-key"
+              class="settings-add-path settings-save-button"
+              type="button"
+              disabled
+            >
+              Save API key
+            </button>
+          </div>
+          <p
+            id="fish-api-key-status"
+            class="settings-status"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <div class="settings-model-settings">
+            <div class="settings-field">
+              <span class="settings-field-label">
+                TTS models
+                <span class="settings-optional">(Priority order, maximum 3)</span>
+              </span>
+
+              <div
+                id="fish-tts-models"
+                class="settings-model-list"
+                data-model-label="TTS"
+                aria-label="TTS models"
+              ></div>
+
+              <button
+                id="add-fish-tts-model"
+                class="settings-add-path settings-add-path-secondary settings-model-add"
+                type="button"
+                disabled
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                <span>Add model</span>
+              </button>
+            </div>
+
+            <button
+              id="save-fish-tts-model"
+              class="settings-add-path settings-save-button"
+              type="button"
+              disabled
+            >
+              Save models
+            </button>
+          </div>
+
+          <p
+            id="fish-tts-model-status"
+            class="settings-status"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <div class="settings-input-save-row">
+            <label class="settings-field" for="fish-voice-id">
+              <span class="settings-field-label">
+                Fish Audio Voice ID
+                <span class="settings-optional">(Optional)</span>
+              </span>
+              <input
+                id="fish-voice-id"
+                class="settings-text-input"
+                type="text"
+                name="fish-voice-id"
+                autocomplete="off"
+                placeholder="Leave blank to use Capri's default voice"
+                maxlength="256"
+              >
+            </label>
+
+            <button
+              id="save-fish-voice-id"
+              class="settings-add-path settings-save-button"
+              type="button"
+              disabled
+            >
+              Save voice ID
+            </button>
+          </div>
+          <p
+            id="fish-voice-id-status"
             class="settings-status"
             role="status"
             aria-live="polite"
